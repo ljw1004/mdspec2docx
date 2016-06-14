@@ -52,152 +52,144 @@
     <Folder Include="Properties\" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="..\..\csharpspec\csharp\arrays.md">
+    <None Include="..\..\csharpspec\arrays.md">
       <Link>csharp\arrays.md</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\..\csharpspec\csharp\attributes.md">
+    <None Include="..\..\csharpspec\attributes.md">
       <Link>csharp\attributes.md</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\..\csharpspec\csharp\basic-concepts.md">
+    <None Include="..\..\csharpspec\basic-concepts.md">
       <Link>csharp\basic-concepts.md</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\..\csharpspec\csharp\classes.md">
+    <None Include="..\..\csharpspec\classes.md">
       <Link>csharp\classes.md</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\..\csharpspec\csharp\conversions.md">
+    <None Include="..\..\csharpspec\conversions.md">
       <Link>csharp\conversions.md</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\..\csharpspec\csharp\csharp.g4">
-      <Link>csharp\csharp.g4</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Include="..\..\csharpspec\csharp\delegates.md">
+    <None Include="..\..\csharpspec\delegates.md">
       <Link>csharp\delegates.md</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\..\csharpspec\csharp\documentation-comments.md">
+    <None Include="..\..\csharpspec\documentation-comments.md">
       <Link>csharp\documentation-comments.md</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\..\csharpspec\csharp\enums.md">
+    <None Include="..\..\csharpspec\enums.md">
       <Link>csharp\enums.md</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\..\csharpspec\csharp\exceptions.md">
+    <None Include="..\..\csharpspec\exceptions.md">
       <Link>csharp\exceptions.md</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\..\csharpspec\csharp\expressions.md">
+    <None Include="..\..\csharpspec\expressions.md">
       <Link>csharp\expressions.md</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\..\csharpspec\csharp\interfaces.md">
+    <None Include="..\..\csharpspec\interfaces.md">
       <Link>csharp\interfaces.md</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\..\csharpspec\csharp\introduction.md">
+    <None Include="..\..\csharpspec\introduction.md">
       <Link>csharp\introduction.md</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\..\csharpspec\csharp\lexical-structure.md">
+    <None Include="..\..\csharpspec\lexical-structure.md">
       <Link>csharp\lexical-structure.md</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\..\csharpspec\csharp\namespaces.md">
+    <None Include="..\..\csharpspec\namespaces.md">
       <Link>csharp\namespaces.md</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\..\csharpspec\csharp\readme.md">
-      <Link>csharp\readme.md</Link>
+    <None Include="..\..\csharpspec\README.md">
+      <Link>csharp\README.md</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\..\csharpspec\csharp\statements.md">
+    <None Include="..\..\csharpspec\statements.md">
       <Link>csharp\statements.md</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\..\csharpspec\csharp\structs.md">
+    <None Include="..\..\csharpspec\structs.md">
       <Link>csharp\structs.md</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\..\csharpspec\csharp\template.docx">
+    <None Include="..\..\csharpspec\template.docx">
       <Link>csharp\template.docx</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\..\csharpspec\csharp\types.md">
+    <None Include="..\..\csharpspec\types.md">
       <Link>csharp\types.md</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\..\csharpspec\csharp\unsafe-code.md">
+    <None Include="..\..\csharpspec\unsafe-code.md">
       <Link>csharp\unsafe-code.md</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\..\csharpspec\csharp\variables.md">
+    <None Include="..\..\csharpspec\variables.md">
       <Link>csharp\variables.md</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\..\vbspec\vb\attributes.md">
+    <None Include="..\..\vbspec\attributes.md">
       <Link>vb\attributes.md</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\..\vbspec\vb\conversions.md">
+    <None Include="..\..\vbspec\conversions.md">
       <Link>vb\conversions.md</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\..\vbspec\vb\documentation-comments.md">
+    <None Include="..\..\vbspec\documentation-comments.md">
       <Link>vb\documentation-comments.md</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\..\vbspec\vb\expressions.md">
+    <None Include="..\..\vbspec\expressions.md">
       <Link>vb\expressions.md</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\..\vbspec\vb\general-concepts.md">
+    <None Include="..\..\vbspec\general-concepts.md">
       <Link>vb\general-concepts.md</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\..\vbspec\vb\introduction.md">
+    <None Include="..\..\vbspec\introduction.md">
       <Link>vb\introduction.md</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\..\vbspec\vb\lexical-grammar.md">
+    <None Include="..\..\vbspec\lexical-grammar.md">
       <Link>vb\lexical-grammar.md</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\..\vbspec\vb\preprocessing-directives.md">
+    <None Include="..\..\vbspec\preprocessing-directives.md">
       <Link>vb\preprocessing-directives.md</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\..\vbspec\vb\readme.md">
+    <None Include="..\..\vbspec\readme.md">
       <Link>vb\readme.md</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\..\vbspec\vb\source-files-and-namespaces.md">
+    <None Include="..\..\vbspec\source-files-and-namespaces.md">
       <Link>vb\source-files-and-namespaces.md</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\..\vbspec\vb\statements.md">
+    <None Include="..\..\vbspec\statements.md">
       <Link>vb\statements.md</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\..\vbspec\vb\template.docx">
+    <None Include="..\..\vbspec\template.docx">
       <Link>vb\template.docx</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\..\vbspec\vb\type-members.md">
+    <None Include="..\..\vbspec\type-members.md">
       <Link>vb\type-members.md</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\..\vbspec\vb\types.md">
+    <None Include="..\..\vbspec\types.md">
       <Link>vb\types.md</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Include="..\..\vbspec\vb\vb.g4">
-      <Link>vb\vb.g4</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Include="project.json" />
