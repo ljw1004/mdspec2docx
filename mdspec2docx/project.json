@@ -3,8 +3,8 @@
     "csharp2colorized": "1.0.3",
     "DocumentFormat.OpenXml": "2.5.0",
     "FSharp.Core": "4.0.0.1",
-    "FSharp.Formatting": "2.14.0",
-    "Microsoft.CodeAnalysis": "1.2.1"
+    "FSharp.Formatting": "2.14.4",
+    "Microsoft.CodeAnalysis": "1.2.2"
   },
   "frameworks": {
     "net46": {}

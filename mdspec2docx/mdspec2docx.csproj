@@ -7,8 +7,8 @@
     <ProjectGuid>{FA74B242-9975-43F8-8803-69CF872D598F}</ProjectGuid>
     <OutputType>Exe</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>cs2docx</RootNamespace>
-    <AssemblyName>cs2docx</AssemblyName>
+    <RootNamespace>mdspec2docx</RootNamespace>
+    <AssemblyName>mdspec2docx</AssemblyName>
     <TargetFrameworkVersion>v4.6</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
@@ -45,6 +45,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="antlr.cs" />
+    <Compile Include="fuzzy-string.cs" />
     <Compile Include="mdspec2docx.cs" />
     <Compile Include="Program.cs" />
   </ItemGroup>
@@ -70,6 +71,10 @@
     </None>
     <None Include="..\..\csharpspec\conversions.md">
       <Link>csharp\conversions.md</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="..\..\csharpspec\csharp.g4">
+      <Link>csharp\csharp.g4</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Include="..\..\csharpspec\delegates.md">
@@ -190,6 +195,10 @@
     </None>
     <None Include="..\..\vbspec\types.md">
       <Link>vb\types.md</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="..\..\vbspec\vb.g4">
+      <Link>vb\vb.g4</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Include="project.json" />

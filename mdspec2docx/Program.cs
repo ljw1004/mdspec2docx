@@ -58,7 +58,17 @@ static class Program
         {
             var htmlfn = Path.ChangeExtension(antlrfn, ".html");
             var grammar = Antlr.ReadFile(antlrfn);
-            if (!AreProductionsSame(grammar, md.Grammar)) Console.WriteLine("ERROR: grammar mismatch");
+            foreach (var diff in CompareGrammars(grammar, md.Grammar))
+            {
+                if (diff.authority == null) Console.WriteLine($"mdspec2docx: error MD021: markdown has superfluous production '{diff.productionName}'");
+                else if (diff.copy == null) Console.WriteLine($"mdspec2docx: error MD022: markdown lacks production '{diff.productionName}'");
+                else
+                {
+                    Console.WriteLine($"mdspec2docx: error MD023: production '{diff.productionName}' differs between markdown and antlr.g4");
+                    Console.WriteLine("mdspec2docx: error MD023b: antlr.g4 says " + diff.authority.Replace("\r", "\\r").Replace("\n", "\\n"));
+                    Console.WriteLine("mdspec2docx: error MD023c: markdown says " + diff.copy.Replace("\r", "\\r").Replace("\n", "\\n"));
+                }
+            }
             foreach (var p in grammar.Productions)
             {
                 p.Link = md.Grammar.Productions.FirstOrDefault(mdp => mdp?.ProductionName == p.ProductionName)?.Link;
@@ -90,8 +100,13 @@ static class Program
         }
     }
 
-    
-    static bool AreProductionsSame(Grammar authority, Grammar copy)
+    class ProductionDifference
+    {
+        public string productionName;
+        public string authority, copy;
+    }
+
+    static IEnumerable<ProductionDifference> CompareGrammars(Grammar authority, Grammar copy)
     {
         Func<Grammar, Dictionary<string, Production>> ToDictionary;
         ToDictionary = g =>
@@ -102,29 +117,25 @@ static class Program
         };
         var dauthority = ToDictionary(authority);
         var dcopy = ToDictionary(copy);
-        var ok = true;
 
         foreach (var p in dauthority.Keys)
         {
             if (!dcopy.ContainsKey(p)) continue;
             string pauthority = Antlr.ToString(dauthority[p]), pcopy = Antlr.ToString(dcopy[p]);
             if (pauthority == pcopy) continue;
-            ok = false;
-            Console.WriteLine($"MISMATCH for '{p}'\r\nAUTHORITY:\r\n{pauthority}\r\nCOPY:\r\n{pcopy}\r\n");
+            yield return new ProductionDifference { productionName = p, authority = pauthority, copy = pcopy };
         }
 
         foreach (var p in dauthority.Keys)
         {
             if (p == "start") continue;
-            if (!dcopy.ContainsKey(p)) { Console.WriteLine($"Copy doesn't contain '{p}'"); ok = false; }
+            if (!dcopy.ContainsKey(p)) yield return new ProductionDifference { productionName = p, authority = "<defined>", copy = null };
         }
         foreach (var p in dcopy.Keys)
         {
             if (p == "start") continue;
-            if (!dauthority.ContainsKey(p)) { Console.WriteLine($"Authority doesn't contain '{p}'"); ok = false; }
+            if (!dauthority.ContainsKey(p)) yield return new ProductionDifference { productionName = p, authority = null, copy = "<defined>" };
         }
-
-        return ok;
     }
 
 

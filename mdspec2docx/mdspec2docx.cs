@@ -11,6 +11,138 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
 
+public class Span
+{
+    public int start, length;
+    public Span(int start, int length) { this.start = start; this.length = length; }
+    public int end => start + length;
+}
+
+internal class SourceLocation
+{
+    private string _file;
+    private MarkdownSpec.SectionRef _section;
+    private MarkdownParagraph _paragraph;
+    private MarkdownSpan _span;
+    private string _loc; // generated lazily. Of the form "file(line/col)" in a format recognizable by msbuild
+
+    public string file
+    {
+        get
+        {
+            return _file;
+        }
+        set
+        {
+            _file = value; _loc = null;
+        }
+    }
+
+    public MarkdownSpec.SectionRef section
+    {
+        get
+        {
+            return _section;
+        }
+        set
+        {
+            _section = value; _loc = null;
+        }
+
+    }
+
+    public MarkdownParagraph paragraph
+    {
+        get
+        {
+            return _paragraph;
+        }
+        set
+        {
+            _paragraph = value; _loc = null;
+        }
+    }
+
+    public MarkdownSpan span
+    {
+        get
+        {
+            return _span;
+        }
+        set
+        {
+            _span = value; _loc = null;
+        }
+    }
+    
+    public string loc
+    {
+        get
+        {
+            // We have either a CurrentSection or a CurrentParagraph or both. Let's try to locate the error.
+            // Ideally this would be present inside the FSharp.MarkdownParagraph or FSharp.MarkdownSpan class itself.
+            // But it's not yet: https://github.com/tpetricek/FSharp.Formatting/issues/410
+            // So for the time being, we have to hack around to try to find it.
+
+            if (_loc != null) return _loc;
+
+            if (file == null)
+            {
+                _loc = "mdspec2docx";
+            }
+            else if (section == null && paragraph == null)
+            {
+                _loc = file;
+            }
+            else
+            {
+                var src = File.ReadAllText(file);
+
+                string src2 = src; int iOffset = 0;
+                bool foundSection = false, foundParagraph = false, foundSpan = false;
+                if (section != null)
+                {
+                    var ss = Fuzzy.FindSection(src2, section);
+                    if (ss != null) { src2 = src2.Substring(ss.start, ss.length); iOffset = ss.start; foundSection = true; }
+                }
+
+                if (paragraph != null)
+                {
+                    var ss = Fuzzy.FindParagraph(src2, paragraph);
+                    if (ss != null) { src2 = src2.Substring(ss.start, ss.length); iOffset += ss.start; foundParagraph = true; }
+                    else
+                    {
+                        // If we can't find the paragraph within the current section, let's try to find it anywhere
+                        ss = Fuzzy.FindParagraph(src, paragraph);
+                        if (ss != null) { src2 = src.Substring(ss.start, ss.length); iOffset = ss.start; foundSection = false; foundParagraph = true; }
+                    }
+                }
+
+                if (span != null)
+                {
+                    var ss = Fuzzy.FindSpan(src2, span);
+                    if (ss != null) { src2 = src.Substring(ss.start, ss.length); iOffset += ss.start; foundSpan = true; }
+                }
+
+                var startPos = iOffset;
+                var endPos = startPos + src2.Length;
+                int startLine, startCol, endLine, endCol;
+                if ((!foundSection && !foundParagraph) || !Fuzzy.FindLineCol(src, startPos, out startLine, out startCol, endPos, out endLine, out endCol))
+                {
+                    _loc = file;
+                }
+                else
+                {
+                    startLine += 1; startCol += 1; endLine += 1; endCol += 1; // 1-based
+                    if (foundSpan) _loc = $"{file}({startLine},{startCol},{endLine},{endCol})";
+                    else if (startLine == endLine) _loc = $"{file}({startLine})";
+                    else _loc = $"{file}({startLine}-{endLine})";
+                }
+            }
+            return _loc;
+        }
+    }
+}
 
 class MarkdownSpec
 {
@@ -19,6 +151,7 @@ class MarkdownSpec
     public Grammar Grammar = new Grammar();
     public List<SectionRef> Sections = new List<SectionRef>();
     public List<ProductionRef> Productions = new List<ProductionRef>();
+    public Reporter Report = new Reporter();
 
     public class ProductionRef
     {
@@ -39,12 +172,29 @@ class MarkdownSpec
     {
         public string Term;
         public string BookmarkName;
+        public SourceLocation Loc;
         public static int count = 1;
 
-        public TermRef(string term)
+        public TermRef(string term, SourceLocation loc)
         {
             Term = term;
+            Loc = loc;
             BookmarkName = $"_Trm{count:00000}"; count++;
+        }
+    }
+
+    public class ItalicUse
+    {
+        public string Literal;
+        public ItalicUseKind Kind;
+        public SourceLocation Loc;
+        public enum ItalicUseKind { Production, Italic, Term };
+
+        public ItalicUse(string literal, ItalicUseKind kind, SourceLocation loc)
+        {
+            Literal = literal;
+            Kind = kind;
+            Loc = loc;
         }
     }
 
@@ -55,15 +205,27 @@ class MarkdownSpec
         public int Level;            // 1-based level, e.g. 3
         public string Url;           // statements.md#goto-statement
         public string BookmarkName;  // _Toc00023
+        public string MarkdownTitle; // "Goto Statement" or "`<code>`"
         public static int count = 1;
 
         public SectionRef(MarkdownParagraph.Heading mdh, string filename)
         {
             Level = mdh.Item1;
             var spans = mdh.Item2;
-            if (spans.Length == 1 && spans.First().IsLiteral) Title = mdunescape(spans.First() as MarkdownSpan.Literal).Trim();
-            else if (spans.Length == 1 && spans.First().IsInlineCode) Title = (spans.First() as MarkdownSpan.InlineCode).Item.Trim();
-            else throw new NotSupportedException("Heading must be a single literal/inlinecode");
+            if (spans.Length == 1 && spans.First().IsLiteral)
+            {
+                Title = mdunescape(spans.First() as MarkdownSpan.Literal).Trim();
+                MarkdownTitle = Title;
+            }
+            else if (spans.Length == 1 && spans.First().IsInlineCode)
+            {
+                Title = (spans.First() as MarkdownSpan.InlineCode).Item.Trim();
+                MarkdownTitle = "`" + Title + "`";
+            }
+            else
+            {
+                throw new NotSupportedException("Heading must be a single literal/inlinecode");
+            }
             foreach (var c in Title)
             {
                 if (c >= 'a' && c <= 'z') Url += c;
@@ -77,6 +239,75 @@ class MarkdownSpec
         }
     }
 
+    public class Reporter
+    {
+        public SourceLocation Location = new SourceLocation();
+
+        public string CurrentFile
+        {
+            get
+            {
+                return Location.file;
+            }
+            set
+            {
+                Location.file = value;
+                Location.section = null;
+                Location.paragraph = null;
+                Location.span = null;
+            }
+        }
+
+        public SectionRef CurrentSection
+        {
+            get
+            {
+                return Location.section;
+            }
+            set
+            {
+                Location.section = value;
+                Location.span = null;
+            }
+        }
+
+        public MarkdownParagraph CurrentParagraph
+        {
+            get
+            {
+                return Location.paragraph;
+            }
+            set
+            {
+                Location.paragraph = value;
+                Location.span = null;
+            }
+        }
+
+        public MarkdownSpan CurrentSpan
+        {
+            get
+            {
+                return Location.span;
+            }
+            set
+            {
+                Location.span = value;
+            }
+        }
+
+        public void Error(string code, string msg, SourceLocation loc = null) => Report(code, "ERROR", msg, loc ?? Location);
+
+        public void Warning(string code, string msg, SourceLocation loc = null) => Report(code, "WARNING", msg, loc ?? Location);
+
+        private void Report(string code, string severity, string msg, SourceLocation loc)
+        {
+            Console.WriteLine($"{loc.loc}: {severity} {code}: {msg}");
+        }
+
+        public void Log(string msg) { }
+
+    }
 
 
     public static MarkdownSpec ReadString(string s)
@@ -104,23 +335,44 @@ class MarkdownSpec
 
         foreach (var src in Sources())
         {
+            Report.CurrentFile = Path.GetFullPath(src.Item1);
             var filename = Path.GetFileName(src.Item1);
             var md = Markdown.Parse(src.Item2);
 
             foreach (var mdp in md.Paragraphs)
             {
+                Report.CurrentParagraph = mdp;
+                Report.CurrentSection = null;
                 if (mdp.IsHeading)
                 {
-                    var sr = new SectionRef(mdp as MarkdownParagraph.Heading, filename);
-                    if (sr.Level == 1) { h1 += 1; h2 = 0; h3 = 0; h4 = 0; sr.Number = $"{h1}"; }
-                    if (sr.Level == 2) { h2 += 1; h3 = 0; h4 = 0; sr.Number = $"{h1}.{h2}"; }
-                    if (sr.Level == 3) { h3 += 1; h4 = 0; sr.Number = $"{h1}.{h2}.{h3}"; }
-                    if (sr.Level == 4) { h4 += 1; sr.Number = $"{h1}.{h2}.{h3}.{h4}"; }
-                    if (sr.Level > 4) throw new NotSupportedException("Only support heading depths up to ####");
-                    if (Sections.Any(s => s.Url == sr.Url)) throw new Exception($"Duplicate section title {sr.Url}");
-                    Sections.Add(sr);
-                    url = sr.Url;
-                    title = sr.Title;
+                    try
+                    {
+                        var sr = new SectionRef(mdp as MarkdownParagraph.Heading, filename);
+                        if (sr.Level == 1) { h1 += 1; h2 = 0; h3 = 0; h4 = 0; sr.Number = $"{h1}"; }
+                        if (sr.Level == 2) { h2 += 1; h3 = 0; h4 = 0; sr.Number = $"{h1}.{h2}"; }
+                        if (sr.Level == 3) { h3 += 1; h4 = 0; sr.Number = $"{h1}.{h2}.{h3}"; }
+                        if (sr.Level == 4) { h4 += 1; sr.Number = $"{h1}.{h2}.{h3}.{h4}"; }
+                        //
+                        if (sr.Level > 4)
+                        {
+                            Report.Error("MD001", "Only support heading depths up to ####");
+                        }
+                        else if (Sections.Any(s => s.Url == sr.Url))
+                        {
+                            Report.Error("MD002", $"Duplicate section title {sr.Url}");
+                        }
+                        else
+                        {
+                            Sections.Add(sr);
+                            url = sr.Url;
+                            title = sr.Title;
+                            Report.CurrentSection = sr;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Report.Error("MD003", ex.Message); // constructor of SectionRef might throw
+                    }
                 }
                 else if (mdp.IsCodeBlock)
                 {
@@ -134,7 +386,7 @@ class MarkdownSpec
                         p.Link = url; p.LinkName = title;
                         if (p.ProductionName != null && Grammar.Productions.Any(dupe => dupe.ProductionName == p.ProductionName))
                         {
-                            Console.WriteLine($"Duplicate grammar for {p.ProductionName}");
+                            Report.Warning("MD004", $"Duplicate grammar for {p.ProductionName}");
                         }
                         Grammar.Productions.Add(p);
                     }
@@ -350,9 +602,10 @@ class MarkdownSpec
 
             var maxBookmarkId = new StrongBox<int>(1 + body.Descendants<BookmarkStart>().Max(bookmark => int.Parse(bookmark.Id)));
             var terms = new SortedList<string, TermRef>();
-            var italics = new List<Tuple<string, string>>();
+            var italics = new List<ItalicUse>();
             foreach (var src in Sources())
             {
+                Report.CurrentFile = Path.GetFullPath(src.Item1);
                 var converter = new MarkdownConverter
                 {
                     Mddoc = Markdown.Parse(src.Item2),
@@ -362,7 +615,8 @@ class MarkdownSpec
                     Productions = Productions,
                     Terms = terms,
                     Italics = italics,
-                    MaxBookmarkId = maxBookmarkId
+                    MaxBookmarkId = maxBookmarkId,
+                    Report = Report
                 };
                 foreach (var p in converter.Paragraphs())
                 {
@@ -370,34 +624,44 @@ class MarkdownSpec
                 }
             }
 
+            Report.CurrentFile = null;
+            Report.CurrentSection = null;
+            Report.CurrentParagraph = null;
+            Report.CurrentSpan = null;
+
             // I wonder if there were any oddities? ...
             // Terms that were referenced before their definition?
             var termset = new HashSet<string>(terms.Keys);
-            var italicset = new HashSet<string>(italics.Where(i => i.Item2 == "italic").Select(i => i.Item1));
+            var italicset = new HashSet<string>(italics.Where(i => i.Kind == ItalicUse.ItalicUseKind.Italic).Select(i => i.Literal));
             italicset.IntersectWith(termset);
-            if (italicset.Any())
+            foreach (var s in italicset)
             {
-                Console.WriteLine("ERROR - these terms were used before their definition: " + string.Join(",", italicset));
+                var use = italics.First(i => i.Literal == s);
+                var def = terms[s];
+                Report.Warning("MD005", $"Term '{s}' used before definition", use.Loc);
+                Report.Warning("MD005b", $"... definition location of '{s}' for previous warning", def.Loc);
             }
 
             // Terms that are also production names?
             var productionset = new HashSet<string>(Grammar.Productions.Where(p => p.ProductionName != null).Select(p => p.ProductionName));
             productionset.IntersectWith(termset);
-            if (productionset.Any())
+            foreach (var s in productionset)
             {
-                Console.WriteLine("ERROR - these terms are also production names: " + string.Join(",", productionset));
+                var def = terms[s];
+                Report.Warning("MD006", $"Terms '{s}' is also a grammar production name", def.Loc);
             }
 
             // Terms that were defined but never used?
-            var termrefset = new HashSet<string>(italics.Where(i => i.Item2 == "term").Select(i => i.Item1));
+            var termrefset = new HashSet<string>(italics.Where(i => i.Kind ==  ItalicUse.ItalicUseKind.Term).Select(i => i.Literal));
             termset.RemoveWhere(t => termrefset.Contains(t));
-            if (termset.Any())
+            foreach (var s in termset)
             {
-                Console.WriteLine("ERROR - these terms are defined but never used: " + string.Join(",", termset));
+                var def = terms[s];
+                Report.Warning("MD007", $"Term '{s}' is defined but never used", def.Loc);
             }
 
             // Which single-word production-names appear in italics?
-            var italicproductionset = new HashSet<string>(italics.Where(i => !i.Item1.Contains("_") && i.Item2 == "production").Select(i => i.Item1));
+            var italicproductionset = new HashSet<string>(italics.Where(i => !i.Literal.Contains("_") && i.Kind == ItalicUse.ItalicUseKind.Production).Select(i => i.Literal));
             var italicproductions = string.Join(",", italicproductionset);
 
             // What are the single-word production names that don't appear in italics?
@@ -407,7 +671,7 @@ class MarkdownSpec
         }
     }
 
-    static string mdunescape(MarkdownSpan.Literal literal) =>
+    public static string mdunescape(MarkdownSpan.Literal literal) =>
         literal.Item.Replace("&amp;", "&").Replace("&lt;", "<").Replace("&gt;", ">").Replace("&reg;", "®");
 
 
@@ -418,10 +682,11 @@ class MarkdownSpec
         public Dictionary<string, SectionRef> Sections;
         public List<ProductionRef> Productions;
         public SortedList<string,TermRef> Terms;
-        public List<Tuple<string, string>> Italics;
+        public List<ItalicUse> Italics;
         public StrongBox<int> MaxBookmarkId;
         public string Filename;
         public string CurrentSection;
+        public Reporter Report;
 
         public IEnumerable<OpenXmlCompositeElement> Paragraphs()
             => Paragraphs2Paragraphs(Mddoc.Paragraphs);
@@ -434,12 +699,14 @@ class MarkdownSpec
 
         IEnumerable<OpenXmlCompositeElement> Paragraph2Paragraphs(MarkdownParagraph md)
         {
+            Report.CurrentParagraph = md;
             if (md.IsHeading)
             {
                 var mdh = md as MarkdownParagraph.Heading;
                 var level = mdh.Item1;
                 var spans = mdh.Item2;
                 var sr = Sections[new SectionRef(mdh, Filename).Url];
+                Report.CurrentSection = sr;
                 var props = new ParagraphProperties(new ParagraphStyleId() { Val = $"Heading{level}" });
                 var p = new Paragraph { ParagraphProperties = props };
                 MaxBookmarkId.Value += 1;
@@ -450,7 +717,7 @@ class MarkdownSpec
                 //
                 var i = sr.Url.IndexOf("#");
                 CurrentSection = $"{sr.Url.Substring(0, i)} {new string('#', level)} {sr.Title} [{sr.Number}]";
-                //Console.WriteLine(CurrentSection); // new string(' ', level * 4 - 4) + sr.Number + " " + sr.Title);
+                Report.Log(CurrentSection);
                 yield break;
             }
 
@@ -550,7 +817,7 @@ class MarkdownSpec
                     }
                     else
                     {
-                        throw new Exception("Unexpected item in list");
+                        Report.Error("MD008", $"Unexpected item in list '{content.GetType().Name}'");
                     }
                 }
             }
@@ -568,7 +835,7 @@ class MarkdownSpec
                 else if (lang == "vb" || lang == "vbnet" || lang == "vb.net") lines = Colorize.VB(code);
                 else if (lang == "" || lang == "xml") lines = Colorize.PlainText(code);
                 else if (lang == "antlr") lines = Antlr.ColorizeAntlr(code);
-                else throw new NotSupportedException($"unrecognized language {lang}");
+                else { Report.Error("MD009", $"unrecognized language {lang}"); lines = Colorize.PlainText(code); }
                 foreach (var line in lines)
                 {
                     if (onFirstLine) onFirstLine = false; else runs.Add(new Run(new Break()));
@@ -601,11 +868,6 @@ class MarkdownSpec
                 }
             }
 
-            else if (md.IsQuotedBlock)
-            {
-                throw new NotSupportedException("Quoted blocks not supported");
-            }
-
             else if (md.IsTableBlock)
             {
                 var mdt = md as MarkdownParagraph.TableBlock;
@@ -613,7 +875,7 @@ class MarkdownSpec
                 var align = mdt.Item2;
                 var rows = mdt.Item3;
                 var table = new Table();
-                if (header == null) Console.WriteLine("ERROR - github requires all tables to have header rows");
+                if (header == null) Report.Error("MD010", "Github requires all tables to have header rows");
                 if (!header.Any(cell => cell.Length > 0)) header = null; // even if Github requires an empty header, we can at least cull it from Docx
                 var tstyle = new TableStyle { Val = "TableGrid" };
                 var tindent = new TableIndentation { Width = 360, Type = TableWidthUnitValues.Dxa };
@@ -659,6 +921,7 @@ class MarkdownSpec
             }
             else
             {
+                Report.Error("MD011", $"Unrecognized markdown element {md.GetType().Name}");
                 yield return new Paragraph(new Run(new Text($"[{md.GetType().Name}]")));
             }
         }
@@ -680,9 +943,9 @@ class MarkdownSpec
                 var level = item.Level;
                 var isItemOrdered = item.IsBulletOrdered;
                 var content = item.Paragraph;
-                if (isOrdered.ContainsKey(level) && isOrdered[level] != isItemOrdered) throw new NotImplementedException("List can't mix ordered and unordered items at same level");
+                if (isOrdered.ContainsKey(level) && isOrdered[level] != isItemOrdered) Report.Error("MD012", "List can't mix ordered and unordered items at same level");
                 isOrdered[level] = isItemOrdered;
-                if (level > 3) throw new Exception("Can't have more than 4 levels in a list");
+                if (level > 3) Report.Error("MD013", "Can't have more than 4 levels in a list");
             }
             return flat;
         }
@@ -718,7 +981,7 @@ class MarkdownSpec
                     }
                     else
                     {
-                        throw new NotImplementedException("nothing fancy allowed in lists");
+                        Report.Error("MD014", $"nothing fancy allowed in lists - specifically not '{mdp.GetType().Name}'");
                     }
                 }
             }
@@ -732,6 +995,7 @@ class MarkdownSpec
 
         IEnumerable<OpenXmlElement> Span2Elements(MarkdownSpan md, bool nestedSpan = false)
         {
+            Report.CurrentSpan = md;
             if (md.IsLiteral)
             {
                 var mdl = md as MarkdownSpan.Literal;
@@ -753,7 +1017,7 @@ class MarkdownSpec
                         var _ = "";
                         if (s.IsEmphasis) { s = (s as MarkdownSpan.Emphasis).Item.Single(); _ = "_"; }
                         if (s.IsLiteral) return _ + (s as MarkdownSpan.Literal).Item + _;
-                        throw new NotSupportedException("something odd inside emphasis");
+                        Report.Error("MD015", $"something odd inside emphasis '{s.GetType().Name}' - only allowed emphasis and literal"); return "";
                     });
                     spans = new List<MarkdownSpan>() { MarkdownSpan.NewLiteral(string.Join("", spans2)) };
                 }
@@ -768,21 +1032,26 @@ class MarkdownSpec
                     if (spans2.Count() == 1 && spans2.First().IsLiteral)
                     {
                         literal = (spans2.First() as MarkdownSpan.Literal).Item;
-                        termdef = new TermRef(literal);
-                        if (Terms.ContainsKey(literal)) Console.WriteLine($"ERROR - term multiple definition - '{literal}'");
-                        else Terms.Add(literal,termdef);
+                        termdef = new TermRef(literal, Report.Location);
+                        if (Terms.ContainsKey(literal))
+                        {
+                            var def = Terms[literal];
+                            Report.Warning("MD016", $"Term '{literal}' defined a second time");
+                            Report.Warning("MD016b", $"Here was the previous definition of term '{literal}'", def.Loc);
+                        }
+                        else Terms.Add(literal, termdef);
                     }
                 }
 
                 // Convention inside our specs is that emphasis only ever contains literals,
                 // either to emphasis some human-text or to refer to an ANTLR-production
                 ProductionRef prodref = null;
-                if (!nestedSpan && md.IsEmphasis && (spans.Count() != 1 || !spans.First().IsLiteral)) throw new NotSupportedException("something odd inside emphasis");
+                if (!nestedSpan && md.IsEmphasis && (spans.Count() != 1 || !spans.First().IsLiteral)) Report.Error("MD017", $"something odd inside emphasis");
                 if (!nestedSpan && md.IsEmphasis && spans.Count() == 1 && spans.First().IsLiteral)
                 {
                     literal = (spans.First() as MarkdownSpan.Literal).Item;
                     prodref = Productions.FirstOrDefault(pr => pr.ProductionNames.Contains(literal));
-                    Italics.Add(Tuple.Create(literal, prodref != null ? "production" : "italic"));
+                    Italics.Add(new ItalicUse(literal, prodref != null ? ItalicUse.ItalicUseKind.Production : ItalicUse.ItalicUseKind.Italic, Report.Location));
                 }
 
                 if (prodref != null)
@@ -850,12 +1119,12 @@ class MarkdownSpec
                 var anchor = "";
                 if (spans.Count() == 1 && spans.First().IsLiteral) anchor = mdunescape(spans.First() as MarkdownSpan.Literal);
                 else if (spans.Count() == 1 && spans.First().IsInlineCode) anchor = (spans.First() as MarkdownSpan.InlineCode).Item;
-                else throw new NotImplementedException("Link anchor must be Literal or InlineCode, not " + md.ToString());
+                else { Report.Error("MD018", $"Link anchor must be Literal or InlineCode, not '{md.GetType().Name}'"); yield break; }
 
                 if (Sections.ContainsKey(url))
                 {
                     var section = Sections[url];
-                    if (anchor != section.Title) throw new Exception($"Mismatch: link anchor is '{anchor}', should be '{section.Title}'");
+                    if (anchor != section.Title) Report.Warning("MD019", $"Mismatch: link anchor is '{anchor}', should be '{section.Title}'");
                     var txt = new Text("§" + section.Number) { Space = SpaceProcessingModeValues.Preserve };
                     var run = new Hyperlink(new Run(txt)) { Anchor = section.BookmarkName };
                     yield return run;
@@ -874,7 +1143,7 @@ class MarkdownSpec
                 }
                 else
                 {
-                    throw new Exception("Absent hyperlink in " + md.ToString());
+                    Report.Error("MD020", $"Hyperlink url '{url}' unrecognized - not a recognized heading, and not http");
                 }
             }
 
@@ -885,6 +1154,7 @@ class MarkdownSpec
 
             else
             {
+                Report.Error("MD020", $"Unrecognized markdown element {md.GetType().Name}");
                 yield return new Run(new Text($"[{md.GetType().Name}]"));
             }
         }
@@ -900,7 +1170,7 @@ class MarkdownSpec
                 var left = literal.Substring(0, i);
                 var right = literal.Substring(i + kv.Key.Length);
                 var termref = kv.Value;
-                Italics.Add(Tuple.Create(kv.Key, "term"));
+                Italics.Add(new ItalicUse(kv.Key, ItalicUse.ItalicUseKind.Term, Report.Location));
 
                 foreach (var r in Literal2Elements(left, isNested)) yield return r;
                 //
