@@ -10,6 +10,7 @@ using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Threading.Tasks;
 
 public class Span
 {
@@ -86,7 +87,7 @@ internal class SourceLocation
                 var startPos = iOffset;
                 var endPos = startPos + src2.Length;
                 int startLine, startCol, endLine, endCol;
-                if ((!foundSection && !foundParagraph) || !Fuzzy.FindLineCol(src, startPos, out startLine, out startCol, endPos, out endLine, out endCol))
+                if ((!foundSection && !foundParagraph) || !Fuzzy.FindLineCol(file, src, startPos, out startLine, out startCol, endPos, out endLine, out endCol))
                 {
                     _loc = file;
                 }
@@ -111,6 +112,7 @@ class MarkdownSpec
     public List<SectionRef> Sections = new List<SectionRef>();
     public List<ProductionRef> Productions = new List<ProductionRef>();
     public Reporter Report = new Reporter();
+    public IEnumerable<Tuple<string, MarkdownDocument>> Sources;
 
     public class ProductionRef
     {
@@ -250,14 +252,9 @@ class MarkdownSpec
             }
         }
 
-        public void Error(string code, string msg, SourceLocation loc = null) => Report(code, "ERROR", msg, loc ?? Location);
+        public void Error(string code, string msg, SourceLocation loc = null) => Program.Report(code, "ERROR", msg, loc?.loc ?? Location.loc);
 
-        public void Warning(string code, string msg, SourceLocation loc = null) => Report(code, "WARNING", msg, loc ?? Location);
-
-        private void Report(string code, string severity, string msg, SourceLocation loc)
-        {
-            Console.WriteLine($"{loc.loc}: {severity} {code}: {msg}");
-        }
+        public void Warning(string code, string msg, SourceLocation loc = null) => Program.Report(code, "WARNING", msg, loc?.loc ?? Location.loc);
 
         public void Log(string msg) { }
 
@@ -280,6 +277,32 @@ class MarkdownSpec
 
     private void Init()
     {
+        // (0) Read all the markdown docs.
+        // We do so in a parallel way, being careful not to block any threadpool threads on IO work;
+        // only on CPU work.
+        if (s != null)
+        {
+            Sources = new[] { Tuple.Create("", Markdown.Parse(BugWorkaroundEncode(s))) };
+        }
+        if (files != null)
+        {
+            var tasks = new List<Task<Tuple<string,MarkdownDocument>>>();
+            foreach (var fn in files)
+            {
+                tasks.Add(Task.Run(async () =>
+                {
+                    using (var reader = File.OpenText(fn))
+                    {
+                        var s = await reader.ReadToEndAsync();
+                        s = BugWorkaroundEncode(s);
+                        return Tuple.Create(fn, Markdown.Parse(s));
+                    }
+                }));
+            }
+            Sources = Task.WhenAll(tasks).GetAwaiter().GetResult();
+        }
+
+
         // (1) Add sections into the dictionary
         int h1 = 0, h2 = 0, h3 = 0, h4 = 0;
         string url = "", title = "";
@@ -287,11 +310,11 @@ class MarkdownSpec
         // (2) Turn all the antlr code blocks into a grammar
         var sbantlr = new StringBuilder();
 
-        foreach (var src in Sources())
+        foreach (var src in Sources)
         {
             Report.CurrentFile = Path.GetFullPath(src.Item1);
             var filename = Path.GetFileName(src.Item1);
-            var md = Markdown.Parse(src.Item2);
+            var md = src.Item2;
 
             foreach (var mdp in md.Paragraphs)
             {
@@ -309,11 +332,11 @@ class MarkdownSpec
                         //
                         if (sr.Level > 4)
                         {
-                            Report.Error("CSmd01", "Only support heading depths up to ####");
+                            Report.Error("MD01", "Only support heading depths up to ####");
                         }
                         else if (Sections.Any(s => s.Url == sr.Url))
                         {
-                            Report.Error("CSmd02", $"Duplicate section title {sr.Url}");
+                            Report.Error("MD02", $"Duplicate section title {sr.Url}");
                         }
                         else
                         {
@@ -325,7 +348,7 @@ class MarkdownSpec
                     }
                     catch (Exception ex)
                     {
-                        Report.Error("CSmd03", ex.Message); // constructor of SectionRef might throw
+                        Report.Error("MD03", ex.Message); // constructor of SectionRef might throw
                     }
                 }
                 else if (mdp.IsCodeBlock)
@@ -340,7 +363,7 @@ class MarkdownSpec
                         p.Link = url; p.LinkName = title;
                         if (p.ProductionName != null && Grammar.Productions.Any(dupe => dupe.ProductionName == p.ProductionName))
                         {
-                            Report.Warning("CSmd04", $"Duplicate grammar for {p.ProductionName}");
+                            Report.Warning("MD04", $"Duplicate grammar for {p.ProductionName}");
                         }
                         Grammar.Productions.Add(p);
                     }
@@ -352,14 +375,6 @@ class MarkdownSpec
         }
     }
 
-    private IEnumerable<Tuple<string, string>> Sources()
-    {
-        if (s != null) yield return Tuple.Create("", BugWorkaroundEncode(s));
-        foreach (var fn in files ?? new string[] { })
-        {
-            yield return Tuple.Create(fn, BugWorkaroundEncode(File.ReadAllText(fn)));
-        }
-    }
 
     private static string BugWorkaroundEncode(string src)
     {
@@ -520,7 +535,6 @@ class MarkdownSpec
         using (var templateDoc = WordprocessingDocument.Open(basedOn, false))
         using (var resultDoc = WordprocessingDocument.Create(fn, WordprocessingDocumentType.Document))
         {
-
             foreach (var part in templateDoc.Parts) resultDoc.AddPart(part.OpenXmlPart, part.RelationshipId);
             var body = resultDoc.MainDocumentPart.Document.Body;
 
@@ -555,22 +569,26 @@ class MarkdownSpec
             }
 
             var maxBookmarkId = new StrongBox<int>(1 + body.Descendants<BookmarkStart>().Max(bookmark => int.Parse(bookmark.Id)));
-            var terms = new SortedList<string, TermRef>();
+            var terms = new Dictionary<string, TermRef>();
+            var termkeys = new List<string>();
             var italics = new List<ItalicUse>();
-            foreach (var src in Sources())
+            var colorizer = new ColorizerCache();
+            foreach (var src in Sources)
             {
                 Report.CurrentFile = Path.GetFullPath(src.Item1);
                 var converter = new MarkdownConverter
                 {
-                    Mddoc = Markdown.Parse(src.Item2),
+                    Mddoc = src.Item2,
                     Filename = Path.GetFileName(src.Item1),
                     Wdoc = resultDoc,
                     Sections = Sections.ToDictionary(sr => sr.Url),
                     Productions = Productions,
                     Terms = terms,
+                    TermKeys = termkeys,
                     Italics = italics,
                     MaxBookmarkId = maxBookmarkId,
-                    Report = Report
+                    Report = Report,
+                    Colorizer = colorizer
                 };
                 foreach (var p in converter.Paragraphs())
                 {
@@ -578,6 +596,7 @@ class MarkdownSpec
                 }
             }
 
+            colorizer.Close();
             Report.CurrentFile = null;
             Report.CurrentSection = null;
             Report.CurrentParagraph = null;
@@ -592,8 +611,8 @@ class MarkdownSpec
             {
                 var use = italics.First(i => i.Literal == s);
                 var def = terms[s];
-                Report.Warning("CSmd05", $"Term '{s}' used before definition", use.Loc);
-                Report.Warning("CSmd05b", $"... definition location of '{s}' for previous warning", def.Loc);
+                Report.Warning("MD05", $"Term '{s}' used before definition", use.Loc);
+                Report.Warning("MD05b", $"... definition location of '{s}' for previous warning", def.Loc);
             }
 
             // Terms that are also production names?
@@ -602,7 +621,7 @@ class MarkdownSpec
             foreach (var s in productionset)
             {
                 var def = terms[s];
-                Report.Warning("CSmd06", $"Terms '{s}' is also a grammar production name", def.Loc);
+                Report.Warning("MD06", $"Terms '{s}' is also a grammar production name", def.Loc);
             }
 
             // Terms that were defined but never used?
@@ -611,7 +630,7 @@ class MarkdownSpec
             foreach (var s in termset)
             {
                 var def = terms[s];
-                Report.Warning("CSmd07", $"Term '{s}' is defined but never used", def.Loc);
+                Report.Warning("MD07", $"Term '{s}' is defined but never used", def.Loc);
             }
 
             // Which single-word production-names appear in italics?
@@ -635,26 +654,21 @@ class MarkdownSpec
         public WordprocessingDocument Wdoc;
         public Dictionary<string, SectionRef> Sections;
         public List<ProductionRef> Productions;
-        public SortedList<string,TermRef> Terms;
+        public Dictionary<string,TermRef> Terms;
+        public List<string> TermKeys;
         public List<ItalicUse> Italics;
         public StrongBox<int> MaxBookmarkId;
         public string Filename;
         public string CurrentSection;
         public Reporter Report;
+        public ColorizerCache Colorizer;
 
         public IEnumerable<OpenXmlCompositeElement> Paragraphs()
             => Paragraphs2Paragraphs(Mddoc.Paragraphs);
 
         IEnumerable<OpenXmlCompositeElement> Paragraphs2Paragraphs(IEnumerable<MarkdownParagraph> pars)
         {
-            //foreach (var md in pars) foreach (var p in Paragraph2Paragraphs(md)) yield return p;
-            var ppars = pars.ToList();
-            for (int i=0; i<ppars.Count; i++)
-            {
-                var md = ppars[i];
-                var rpars = Paragraph2Paragraphs(md);
-                foreach (var p in rpars) yield return p;
-            }
+            foreach (var md in pars) foreach (var p in Paragraph2Paragraphs(md)) yield return p;
         }
 
 
@@ -686,7 +700,7 @@ class MarkdownSpec
             {
                 var mdp = md as MarkdownParagraph.Paragraph;
                 var spans = mdp.Item;
-                yield return new Paragraph(Spans2Elements(spans).ToList());
+                yield return new Paragraph(Spans2Elements(spans));
                 yield break;
             }
 
@@ -748,8 +762,8 @@ class MarkdownSpec
                     if (content.IsParagraph || content.IsSpan)
                     {
                         var spans = (content.IsParagraph ? (content as MarkdownParagraph.Paragraph).Item : (content as MarkdownParagraph.Span).Item);
-                        if (item.HasBullet) yield return new Paragraph(Spans2Elements(spans).ToList()) { ParagraphProperties = new ParagraphProperties(new NumberingProperties(new ParagraphStyleId { Val = "ListParagraph" }, new NumberingLevelReference { Val = item.Level }, new NumberingId { Val = nid })) };
-                        else yield return new Paragraph(Spans2Elements(spans).ToList()) { ParagraphProperties = new ParagraphProperties(new Indentation { Left = calcIndent(item.Level) }) };
+                        if (item.HasBullet) yield return new Paragraph(Spans2Elements(spans)) { ParagraphProperties = new ParagraphProperties(new NumberingProperties(new ParagraphStyleId { Val = "ListParagraph" }, new NumberingLevelReference { Val = item.Level }, new NumberingId { Val = nid })) };
+                        else yield return new Paragraph(Spans2Elements(spans)) { ParagraphProperties = new ParagraphProperties(new Indentation { Left = calcIndent(item.Level) }) };
                     }
                     else if (content.IsQuotedBlock || content.IsCodeBlock)
                     {
@@ -778,7 +792,7 @@ class MarkdownSpec
                     }
                     else
                     {
-                        Report.Error("CSmd08", $"Unexpected item in list '{content.GetType().Name}'");
+                        Report.Error("MD08", $"Unexpected item in list '{content.GetType().Name}'");
                     }
                 }
             }
@@ -792,11 +806,11 @@ class MarkdownSpec
                 var runs = new List<Run>();
                 var onFirstLine = true;
                 IEnumerable<ColorizedLine> lines;
-                if (lang == "csharp" || lang == "c#" || lang == "cs") lines = Colorize.CSharp(code).ToList();
-                else if (lang == "vb" || lang == "vbnet" || lang == "vb.net") lines = Colorize.VB(code).ToList();
-                else if (lang == "" || lang == "xml") lines = Colorize.PlainText(code).ToList();
-                else if (lang == "antlr") lines = Antlr.ColorizeAntlr(code).ToList();
-                else { Report.Error("CSmd09", $"unrecognized language {lang}"); lines = Colorize.PlainText(code); }
+                if (lang == "csharp" || lang == "c#" || lang == "cs") lines = Colorizer.Colorize(code, Colorize.CSharp);
+                else if (lang == "vb" || lang == "vbnet" || lang == "vb.net") lines = Colorizer.Colorize(code, Colorize.VB);
+                else if (lang == "" || lang == "xml") lines = Colorizer.Colorize(code, Colorize.PlainText);
+                else if (lang == "antlr") lines = Colorizer.Colorize(code, Antlr.ColorizeAntlr);
+                else { Report.Error("MD09", $"unrecognized language {lang}"); lines = Colorize.PlainText(code); }
                 foreach (var line in lines)
                 {
                     if (onFirstLine) onFirstLine = false; else runs.Add(new Run(new Break()));
@@ -836,7 +850,7 @@ class MarkdownSpec
                 var align = mdt.Item2;
                 var rows = mdt.Item3;
                 var table = new Table();
-                if (header == null) Report.Error("CSmd10", "Github requires all tables to have header rows");
+                if (header == null) Report.Error("MD10", "Github requires all tables to have header rows");
                 if (!header.Any(cell => cell.Length > 0)) header = null; // even if Github requires an empty header, we can at least cull it from Docx
                 var tstyle = new TableStyle { Val = "TableGrid" };
                 var tindent = new TableIndentation { Width = 360, Type = TableWidthUnitValues.Dxa };
@@ -882,7 +896,7 @@ class MarkdownSpec
             }
             else
             {
-                Report.Error("CSmd11", $"Unrecognized markdown element {md.GetType().Name}");
+                Report.Error("MD11", $"Unrecognized markdown element {md.GetType().Name}");
                 yield return new Paragraph(new Run(new Text($"[{md.GetType().Name}]")));
             }
         }
@@ -904,9 +918,9 @@ class MarkdownSpec
                 var level = item.Level;
                 var isItemOrdered = item.IsBulletOrdered;
                 var content = item.Paragraph;
-                if (isOrdered.ContainsKey(level) && isOrdered[level] != isItemOrdered) Report.Error("CSmd12", "List can't mix ordered and unordered items at same level");
+                if (isOrdered.ContainsKey(level) && isOrdered[level] != isItemOrdered) Report.Error("MD12", "List can't mix ordered and unordered items at same level");
                 isOrdered[level] = isItemOrdered;
-                if (level > 3) Report.Error("CSmd13", "Can't have more than 4 levels in a list");
+                if (level > 3) Report.Error("MD13", "Can't have more than 4 levels in a list");
             }
             return flat;
         }
@@ -942,7 +956,7 @@ class MarkdownSpec
                     }
                     else
                     {
-                        Report.Error("CSmd14", $"nothing fancy allowed in lists - specifically not '{mdp.GetType().Name}'");
+                        Report.Error("MD14", $"nothing fancy allowed in lists - specifically not '{mdp.GetType().Name}'");
                     }
                 }
             }
@@ -978,7 +992,7 @@ class MarkdownSpec
                         var _ = "";
                         if (s.IsEmphasis) { s = (s as MarkdownSpan.Emphasis).Item.Single(); _ = "_"; }
                         if (s.IsLiteral) return _ + (s as MarkdownSpan.Literal).Item + _;
-                        Report.Error("CSmd15", $"something odd inside emphasis '{s.GetType().Name}' - only allowed emphasis and literal"); return "";
+                        Report.Error("MD15", $"something odd inside emphasis '{s.GetType().Name}' - only allowed emphasis and literal"); return "";
                     });
                     spans = new List<MarkdownSpan>() { MarkdownSpan.NewLiteral(string.Join("", spans2)) };
                 }
@@ -997,17 +1011,17 @@ class MarkdownSpec
                         if (Terms.ContainsKey(literal))
                         {
                             var def = Terms[literal];
-                            Report.Warning("CSmd16", $"Term '{literal}' defined a second time");
-                            Report.Warning("CSmd16b", $"Here was the previous definition of term '{literal}'", def.Loc);
+                            Report.Warning("MD16", $"Term '{literal}' defined a second time");
+                            Report.Warning("MD16b", $"Here was the previous definition of term '{literal}'", def.Loc);
                         }
-                        else Terms.Add(literal, termdef);
+                        else { Terms.Add(literal, termdef); TermKeys.Clear(); }
                     }
                 }
 
                 // Convention inside our specs is that emphasis only ever contains literals,
                 // either to emphasis some human-text or to refer to an ANTLR-production
                 ProductionRef prodref = null;
-                if (!nestedSpan && md.IsEmphasis && (spans.Count() != 1 || !spans.First().IsLiteral)) Report.Error("CSmd17", $"something odd inside emphasis");
+                if (!nestedSpan && md.IsEmphasis && (spans.Count() != 1 || !spans.First().IsLiteral)) Report.Error("MD17", $"something odd inside emphasis");
                 if (!nestedSpan && md.IsEmphasis && spans.Count() == 1 && spans.First().IsLiteral)
                 {
                     literal = (spans.First() as MarkdownSpan.Literal).Item;
@@ -1080,12 +1094,12 @@ class MarkdownSpec
                 var anchor = "";
                 if (spans.Count() == 1 && spans.First().IsLiteral) anchor = mdunescape(spans.First() as MarkdownSpan.Literal);
                 else if (spans.Count() == 1 && spans.First().IsInlineCode) anchor = (spans.First() as MarkdownSpan.InlineCode).Item;
-                else { Report.Error("CSmd18", $"Link anchor must be Literal or InlineCode, not '{md.GetType().Name}'"); yield break; }
+                else { Report.Error("MD18", $"Link anchor must be Literal or InlineCode, not '{md.GetType().Name}'"); yield break; }
 
                 if (Sections.ContainsKey(url))
                 {
                     var section = Sections[url];
-                    if (anchor != section.Title) Report.Warning("CSmd19", $"Mismatch: link anchor is '{anchor}', should be '{section.Title}'");
+                    if (anchor != section.Title) Report.Warning("MD19", $"Mismatch: link anchor is '{anchor}', should be '{section.Title}'");
                     var txt = new Text("§" + section.Number) { Space = SpaceProcessingModeValues.Preserve };
                     var run = new Hyperlink(new Run(txt)) { Anchor = section.BookmarkName };
                     yield return run;
@@ -1104,7 +1118,7 @@ class MarkdownSpec
                 }
                 else
                 {
-                    Report.Error("CSmd20", $"Hyperlink url '{url}' unrecognized - not a recognized heading, and not http");
+                    Report.Error("MD20", $"Hyperlink url '{url}' unrecognized - not a recognized heading, and not http");
                 }
             }
 
@@ -1115,36 +1129,77 @@ class MarkdownSpec
 
             else
             {
-                Report.Error("CSmd20", $"Unrecognized markdown element {md.GetType().Name}");
+                Report.Error("MD20", $"Unrecognized markdown element {md.GetType().Name}");
                 yield return new Run(new Text($"[{md.GetType().Name}]"));
             }
         }
 
 
+        struct Needle
+        {
+            public int needle; // or -1 if this was a non-matching span
+            public int istart;
+            public int length;
+        }
+
+        static List<int> needleCounts = new List<int>(200);
+
+        static IEnumerable<Needle> FindNeedles(IEnumerable<string> needles0, string haystack)
+        {
+            IList<string> needles = (needles0 as IList<string>) ?? new List<string>(needles0);
+            for (int i = 0; i < Math.Min(needleCounts.Count, needles.Count); i++) needleCounts[i] = 0;
+            while (needleCounts.Count < needles.Count) needleCounts.Add(0);
+            //
+            var xcount = 0;
+            for (int ic = 0; ic < haystack.Length; ic++)
+            {
+                var c = haystack[ic];
+                xcount++;
+                for (int i = 0; i < needles.Count; i++)
+                {
+                    if (needles[i][needleCounts[i]] == c)
+                    {
+                        needleCounts[i]++;
+                        if (needleCounts[i] == needles[i].Length)
+                        {
+                            if (xcount > needleCounts[i]) yield return new Needle { needle = -1, istart = ic + 1 - xcount, length = xcount - needleCounts[i] };
+                            yield return new Needle { needle = i, istart = ic + 1 - needleCounts[i], length = needleCounts[i] };
+                            xcount = 0;
+                            for (int j = 0; j < needles.Count; j++) needleCounts[j] = 0;
+                            break;
+                        }
+                    }
+                    else
+                    {
+                        needleCounts[i] = 0;
+                    }
+                }
+            }
+            if (xcount > 0) yield return new Needle { needle = -1, istart = haystack.Length - xcount, length = xcount };
+        }
+
+
         IEnumerable<OpenXmlElement> Literal2Elements(string literal, bool isNested)
         {
-            foreach (var kv in Terms)
+            if (isNested || Terms.Count == 0)
             {
-                if (isNested) break;
-                var i = literal.IndexOf(kv.Key);
-                if (i == -1) continue;
-                var left = literal.Substring(0, i);
-                var right = literal.Substring(i + kv.Key.Length);
-                var termref = kv.Value;
-                Italics.Add(new ItalicUse(kv.Key, ItalicUse.ItalicUseKind.Term, Report.Location));
-
-                foreach (var r in Literal2Elements(left, isNested)) yield return r;
-                //
-                var props = new RunProperties(new Underline { Val = UnderlineValues.Dotted, Color = "4BACC6" });
-                var run = new Run(new Text(kv.Key) { Space = SpaceProcessingModeValues.Preserve }) { RunProperties = props };
-                var link = new Hyperlink(run) { Anchor = termref.BookmarkName };
-                yield return link;
-                //
-                foreach (var r in Literal2Elements(right, isNested)) yield return r;
+                yield return new Run(new Text(literal) { Space = SpaceProcessingModeValues.Preserve });
                 yield break;
             }
 
-            yield return new Run(new Text(literal) { Space = SpaceProcessingModeValues.Preserve });
+            if (TermKeys.Count == 0) TermKeys.AddRange(Terms.Keys);
+
+            foreach (var needle in FindNeedles(TermKeys, literal))
+            {
+                var s = literal.Substring(needle.istart, needle.length);
+                if (needle.needle == -1) { yield return new Run(new Text(s) { Space = SpaceProcessingModeValues.Preserve }); continue; }
+                var termref = Terms[s];
+                Italics.Add(new ItalicUse(s, ItalicUse.ItalicUseKind.Term, Report.Location));
+                var props = new RunProperties(new Underline { Val = UnderlineValues.Dotted, Color = "4BACC6" });
+                var run = new Run(new Text(s) { Space = SpaceProcessingModeValues.Preserve }) { RunProperties = props };
+                var link = new Hyperlink(run) { Anchor = termref.BookmarkName };
+                yield return link;
+            }
 
         }
 
@@ -1154,3 +1209,114 @@ class MarkdownSpec
 }
 
 
+class ColorizerCache
+{
+    class CacheEntry
+    {
+        public bool isUsed;
+        public List<ColorizedLine> clines;
+    }
+
+    private Dictionary<string, CacheEntry> cache = new Dictionary<string, CacheEntry>();
+    private bool hasNew;
+    private string fn = Path.GetTempPath() + "\\colorized.cache.txt";
+
+    public ColorizerCache()
+    {
+        if (!File.Exists(fn)) return;
+        try
+        {
+            using (var s = new StreamReader(fn))
+            {
+                while (true)
+                {
+                    var code = s.ReadLine();
+                    var clines = s.ReadLine();
+                    if (code == "EOF" && clines == null) return;
+                    if (code == null || clines == null) { cache.Clear(); return; }
+                    cache[DeserializeCode(code)] = new CacheEntry { clines = DeserializeColor(clines) };
+                }
+            }
+        }
+        catch (FileNotFoundException)
+        {
+        }
+    }
+
+    public void Close()
+    {
+        if (!hasNew && cache.All(kv => kv.Value.isUsed)) return;
+        using (var s = new StreamWriter(fn))
+        {
+            foreach (var kv in cache)
+            {
+                if (!kv.Value.isUsed) continue;
+                s.WriteLine(SerializeCode(kv.Key));
+                s.WriteLine(SerializeColor(kv.Value.clines));
+            }
+            s.WriteLine("EOF");
+        }
+    }
+
+    public IEnumerable<ColorizedLine> Colorize(string code, Func<string, IEnumerable<ColorizedLine>> generator)
+    {
+        CacheEntry e;
+        if (cache.TryGetValue(code, out e))
+        {
+            e.isUsed = true;
+            return e.clines;
+        }
+        hasNew = true;
+        e = new CacheEntry { isUsed = true, clines = generator(code).ToList() };
+        cache.Add(code, e);
+        return e.clines;
+    }
+
+    static string SerializeCode(string code)
+    {
+        return code.Replace("\\", "\\\\").Replace("\r", "\\r").Replace("\n", "\\n");
+    }
+
+    static string DeserializeCode(string src)
+    {
+        return src.Replace("\\r", "\r").Replace("\\n", "\n").Replace("\\\\", "\\");
+    }
+
+    static string SerializeColor(IEnumerable<ColorizedLine> lines)
+    {
+        var sb = new StringBuilder();
+        foreach (var line in lines)
+        {
+            foreach (var word in line.Words)
+            {
+                sb.Append(word.IsItalic ? "i#" : "r#");
+                sb.Append($"{word.Red:X2}{word.Green:X2}{word.Blue:X2}");
+                sb.Append(word.Text.Replace("\\", "\\\\").Replace(",", "\\c").Replace("\n", "\\n").Replace("\r", "\\r"));
+                sb.Append(",");
+            }
+            sb.Append(",");
+        }
+        return sb.ToString();
+    }
+
+    static List<ColorizedLine> DeserializeColor(string src)
+    {
+        var atoms = src.Split(',');
+        var lines = new List<ColorizedLine>();
+        var line = new ColorizedLine();
+        foreach (var atom in atoms)
+        {
+            if (atom == "") { lines.Add(line); line = new ColorizedLine(); continue; }
+            // i#RRGGBBt
+            var w = new ColorizedWord();
+            if (atom[0] == 'i') w.IsItalic = true;
+            var col = Convert.ToUInt32(atom.Substring(2, 6), 16);
+            w.Red = (int)((col >> 16) & 255);
+            w.Green = (int)((col >> 8) & 255);
+            w.Blue = (int)((col >> 0) & 255);
+            w.Text = atom.Substring(8).Replace("\\r", "\r").Replace("\\n", "\n").Replace("\\c", ",").Replace("\\\\", "\\");
+            line.Words.Add(w);
+        }
+        return lines;
+    }
+}

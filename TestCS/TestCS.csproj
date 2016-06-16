@@ -50,7 +50,7 @@
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
-    <PostBuildEvent>cd "$(SolutionDir)mdspec2docx\bin\$(ConfigurationName)\csharp" &amp;&amp; ..\mdspec2docx.exe</PostBuildEvent>
+    <PostBuildEvent>cd "$(SolutionDir)..\csharpspec" &amp;&amp; "$(SolutionDir)mdspec2docx\$(OutDir)\mdspec2docx.exe" *.md *.g4 template.docx -o csharp.html -o "CSharp Language Specification.docx" -interactive</PostBuildEvent>
   </PropertyGroup>
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.

@@ -4,7 +4,8 @@
     "DocumentFormat.OpenXml": "2.5.0",
     "FSharp.Core": "4.0.0.1",
     "FSharp.Formatting": "2.14.4",
-    "Microsoft.CodeAnalysis": "1.2.2"
+    "Microsoft.CodeAnalysis": "1.2.2",
+    "Newtonsoft.Json": "8.0.3"
   },
   "frameworks": {
     "net46": {}

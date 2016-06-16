@@ -8,21 +8,30 @@ using System.Threading.Tasks;
 
 class Fuzzy
 {
-    public static bool FindLineCol(string src, int startPos, out int startLine, out int startCol, int endPos, out int endLine, out int endCol)
+    public static Dictionary<string, List<int>> linestarts = new Dictionary<string, List<int>>();
+
+    public static bool FindLineCol(string fn, string src, int startPos, out int startLine, out int startCol, int endPos, out int endLine, out int endCol)
     {
         startLine = -1; startCol = -1; endLine = -1; endCol = -1;
-        var lines = FindRawLines(src).ToList();
-        for (int i=0; i<lines.Count; i++)
+
+        List<int> starts;
+        if (!linestarts.TryGetValue(fn, out starts))
         {
-            if (lines[i].span.start <= startPos && (i==lines.Count || lines[i+1].span.start > startPos))
+            starts = FindRawLines(src).Select(raw => raw.span.start).ToList();
+            linestarts[fn] = starts;
+        }
+        
+        for (int i=0; i<starts.Count; i++)
+        {
+            if (starts[i] <= startPos && (i==starts.Count || starts[i+1] > startPos))
             {
                 startLine = i;
-                startCol = startPos - lines[i].span.start;
+                startCol = startPos - starts[i];
             }
-            if (lines[i].span.start <= endPos && (i == lines.Count || lines[i+1].span.start > endPos))
+            if (starts[i] <= endPos && (i==starts.Count || starts[i+1] > endPos))
             {
                 endLine = i;
-                endCol = endPos - lines[i].span.start;
+                endCol = endPos - starts[i];
             }
         }
         if (startLine == -1 || startCol == -1 || endLine == -1 || endCol == -1) return false;

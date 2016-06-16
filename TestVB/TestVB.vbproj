@@ -73,9 +73,53 @@
   <ItemGroup>
     <Folder Include="My Project\" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\vbspec\attributes.md">
+      <Link>vb\attributes.md</Link>
+    </None>
+    <None Include="..\..\vbspec\conversions.md">
+      <Link>vb\conversions.md</Link>
+    </None>
+    <None Include="..\..\vbspec\documentation-comments.md">
+      <Link>vb\documentation-comments.md</Link>
+    </None>
+    <None Include="..\..\vbspec\expressions.md">
+      <Link>vb\expressions.md</Link>
+    </None>
+    <None Include="..\..\vbspec\general-concepts.md">
+      <Link>vb\general-concepts.md</Link>
+    </None>
+    <None Include="..\..\vbspec\introduction.md">
+      <Link>vb\introduction.md</Link>
+    </None>
+    <None Include="..\..\vbspec\lexical-grammar.md">
+      <Link>vb\lexical-grammar.md</Link>
+    </None>
+    <None Include="..\..\vbspec\preprocessing-directives.md">
+      <Link>vb\preprocessing-directives.md</Link>
+    </None>
+    <None Include="..\..\vbspec\README.md">
+      <Link>vb\README.md</Link>
+    </None>
+    <None Include="..\..\vbspec\source-files-and-namespaces.md">
+      <Link>vb\source-files-and-namespaces.md</Link>
+    </None>
+    <None Include="..\..\vbspec\statements.md">
+      <Link>vb\statements.md</Link>
+    </None>
+    <None Include="..\..\vbspec\type-members.md">
+      <Link>vb\type-members.md</Link>
+    </None>
+    <None Include="..\..\vbspec\types.md">
+      <Link>vb\types.md</Link>
+    </None>
+    <None Include="..\..\vbspec\vb.g4">
+      <Link>vb\vb.g4</Link>
+    </None>
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.VisualBasic.targets" />
   <PropertyGroup>
-    <PostBuildEvent>cd "$(SolutionDir)mdspec2docx\bin\$(ConfigurationName)\vb" &amp;&amp; ..\mdspec2docx.exe</PostBuildEvent>
+    <PostBuildEvent>cd "$(SolutionDir)..\vbspec" &amp;&amp; "$(SolutionDir)mdspec2docx\$(OutDir)\mdspec2docx.exe" *.md *.g4 template.docx -o vb.html -o "Visual Basic Language Specification.docx" -interactive</PostBuildEvent>
   </PropertyGroup>
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.
