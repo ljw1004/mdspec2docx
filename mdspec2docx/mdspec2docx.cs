@@ -20,61 +20,20 @@ public class Span
 
 internal class SourceLocation
 {
-    private string _file;
-    private MarkdownSpec.SectionRef _section;
-    private MarkdownParagraph _paragraph;
-    private MarkdownSpan _span;
-    private string _loc; // generated lazily. Of the form "file(line/col)" in a format recognizable by msbuild
+    public readonly string file;
+    public readonly MarkdownSpec.SectionRef section;
+    public readonly MarkdownParagraph paragraph;
+    public readonly MarkdownSpan span;
+    public string _loc; // generated lazily. Of the form "file(line/col)" in a format recognizable by msbuild
 
-    public string file
+    public SourceLocation(string file, MarkdownSpec.SectionRef section, MarkdownParagraph paragraph, MarkdownSpan span)
     {
-        get
-        {
-            return _file;
-        }
-        set
-        {
-            _file = value; _loc = null;
-        }
+        this.file = file;
+        this.section = section;
+        this.paragraph = paragraph;
+        this.span = span;
     }
 
-    public MarkdownSpec.SectionRef section
-    {
-        get
-        {
-            return _section;
-        }
-        set
-        {
-            _section = value; _loc = null;
-        }
-
-    }
-
-    public MarkdownParagraph paragraph
-    {
-        get
-        {
-            return _paragraph;
-        }
-        set
-        {
-            _paragraph = value; _loc = null;
-        }
-    }
-
-    public MarkdownSpan span
-    {
-        get
-        {
-            return _span;
-        }
-        set
-        {
-            _span = value; _loc = null;
-        }
-    }
-    
     public string loc
     {
         get
@@ -241,7 +200,7 @@ class MarkdownSpec
 
     public class Reporter
     {
-        public SourceLocation Location = new SourceLocation();
+        public SourceLocation Location = new SourceLocation(null,null,null,null);
 
         public string CurrentFile
         {
@@ -251,10 +210,7 @@ class MarkdownSpec
             }
             set
             {
-                Location.file = value;
-                Location.section = null;
-                Location.paragraph = null;
-                Location.span = null;
+                Location = new SourceLocation(value, null, null, null);
             }
         }
 
@@ -266,8 +222,7 @@ class MarkdownSpec
             }
             set
             {
-                Location.section = value;
-                Location.span = null;
+                Location = new SourceLocation(CurrentFile, value, CurrentParagraph, null);
             }
         }
 
@@ -279,8 +234,7 @@ class MarkdownSpec
             }
             set
             {
-                Location.paragraph = value;
-                Location.span = null;
+                Location = new SourceLocation(CurrentFile, CurrentSection, value, null);
             }
         }
 
@@ -292,7 +246,7 @@ class MarkdownSpec
             }
             set
             {
-                Location.span = value;
+                Location = new SourceLocation(CurrentFile, CurrentSection, CurrentParagraph, value);
             }
         }
 
@@ -693,7 +647,14 @@ class MarkdownSpec
 
         IEnumerable<OpenXmlCompositeElement> Paragraphs2Paragraphs(IEnumerable<MarkdownParagraph> pars)
         {
-            foreach (var md in pars) foreach (var p in Paragraph2Paragraphs(md)) yield return p;
+            //foreach (var md in pars) foreach (var p in Paragraph2Paragraphs(md)) yield return p;
+            var ppars = pars.ToList();
+            for (int i=0; i<ppars.Count; i++)
+            {
+                var md = ppars[i];
+                var rpars = Paragraph2Paragraphs(md);
+                foreach (var p in rpars) yield return p;
+            }
         }
 
 

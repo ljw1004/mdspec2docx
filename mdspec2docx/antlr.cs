@@ -284,7 +284,11 @@ static class Antlr
             {
                 tokens.AddLast("\r\n"); pos += 2;
             }
-            else if (":*?|+;()\r\n".Contains(s[pos]))
+            else if (s.Substring(pos,1) == "\r" || s.Substring(pos,1) == "\n")
+            {
+                tokens.AddLast("\r\n"); pos += 1;
+            }
+            else if (":*?|+;()".Contains(s[pos]))
             {
                 tokens.AddLast(s[pos].ToString()); pos++;
             }

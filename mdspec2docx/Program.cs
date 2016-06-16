@@ -121,7 +121,8 @@ static class Program
         foreach (var p in dauthority.Keys)
         {
             if (!dcopy.ContainsKey(p)) continue;
-            string pauthority = Antlr.ToString(dauthority[p]), pcopy = Antlr.ToString(dcopy[p]);
+            Production pauthority0 = dauthority[p], pcopy0 = dcopy[p];
+            string pauthority = Antlr.ToString(pauthority0), pcopy = Antlr.ToString(pcopy0);
             if (pauthority == pcopy) continue;
             yield return new ProductionDifference { productionName = p, authority = pauthority, copy = pcopy };
         }
