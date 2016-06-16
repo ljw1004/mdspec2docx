@@ -1,0 +1,17 @@
+﻿<?xml version="1.0"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2011/10/nuspec.xsd">
+  <metadata>
+    <id>mdspec2docx</id>
+    <version>1.0.0</version>
+	<title>mdspec2docx</title>
+    <authors>Lucian Wischik</authors>
+    <owners>Lucian Wischik</owners>
+    <licenseUrl>https://raw.githubusercontent.com/ljw1004/mdspec2docx/master/LICENSE</licenseUrl>
+    <projectUrl>https://github.com/ljw1004/mdspec2docx</projectUrl>
+	<iconUrl>https://raw.githubusercontent.com/ljw1004/mdspec2docx/master/mdspec2docx/mdspec2docx.png</iconUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <developmentDependency>true</developmentDependency>
+    <description>Command line tool to turn a language specification written in markdown, into docx</description>
+    <summary>markdown -> docx converter</summary>
+  </metadata>
+</package>

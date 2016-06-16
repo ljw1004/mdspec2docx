@@ -53,6 +53,7 @@
     <Folder Include="Properties\" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="mdspec2docx.nuspec" />
     <None Include="project.json" />
   </ItemGroup>
   <ItemGroup>
@@ -61,12 +62,25 @@
       <Name>grammar2html</Name>
     </ProjectReference>
   </ItemGroup>
+  <ItemGroup>
+    <Content Include="mdspec2docx.png" />
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
-  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
-       Other similar extension points exist, see Microsoft.Common.targets.
-  <Target Name="BeforeBuild">
-  </Target>
   <Target Name="AfterBuild">
+    <CreateItem Include="bin\$(Configuration)\*.exe">
+      <Output TaskParameter="Include" ItemName="ExeFilesToCopy" />
+    </CreateItem>
+    <CreateItem Include="bin\$(Configuration)\*.dll">
+      <Output TaskParameter="Include" ItemName="DllFilesToCopy" />
+    </CreateItem>
+    <CreateItem Include="bin\$(Configuration)\*.pdb">
+      <Output TaskParameter="Include" ItemName="PdbFilesToCopy" />
+    </CreateItem>
+    <Copy SkipUnchangedFiles="true" SourceFiles="mdspec2docx.nuspec" DestinationFolder="bin\$(Configuration)\nupkg" />
+    <Copy SkipUnchangedFiles="true" SourceFiles="bin\$(Configuration)\mdspec2docx.exe.config" DestinationFolder="bin\$(Configuration)\nupkg\tools" />
+    <Copy SkipUnchangedFiles="true" SourceFiles="@(ExeFilesToCopy)" DestinationFolder="bin\$(Configuration)\nupkg\tools" />
+    <Copy SkipUnchangedFiles="true" SourceFiles="@(DllFilesToCopy)" DestinationFolder="bin\$(Configuration)\nupkg\tools" />
+    <Copy SkipUnchangedFiles="true" SourceFiles="@(PdbFilesToCopy)" DestinationFolder="bin\$(Configuration)\nupkg\tools" />
+    <Exec Command="$(UserProfile)\.nuget\packages\nuget.commandline\3.4.3\tools\NuGet.exe pack mdspec2docx.nuspec -OutputDirectory .." WorkingDirectory="bin\$(Configuration)\nupkg" Outputs="bin\$(Configuration)\*.nupkg" />
   </Target>
-  -->
 </Project>
