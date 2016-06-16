@@ -806,10 +806,10 @@ class MarkdownSpec
                 var runs = new List<Run>();
                 var onFirstLine = true;
                 IEnumerable<ColorizedLine> lines;
-                if (lang == "csharp" || lang == "c#" || lang == "cs") lines = Colorizer.Colorize(code, Colorize.CSharp);
-                else if (lang == "vb" || lang == "vbnet" || lang == "vb.net") lines = Colorizer.Colorize(code, Colorize.VB);
-                else if (lang == "" || lang == "xml") lines = Colorizer.Colorize(code, Colorize.PlainText);
-                else if (lang == "antlr") lines = Colorizer.Colorize(code, Antlr.ColorizeAntlr);
+                if (lang == "csharp" || lang == "c#" || lang == "cs") lines = Colorizer.Colorize("cs",code, Colorize.CSharp);
+                else if (lang == "vb" || lang == "vbnet" || lang == "vb.net") lines = Colorizer.Colorize("vb",code, Colorize.VB);
+                else if (lang == "" || lang == "xml") lines = Colorizer.Colorize("plain",code, Colorize.PlainText);
+                else if (lang == "antlr") lines = Colorizer.Colorize("antlr",code, Antlr.ColorizeAntlr);
                 else { Report.Error("MD09", $"unrecognized language {lang}"); lines = Colorize.PlainText(code); }
                 foreach (var line in lines)
                 {
@@ -1258,17 +1258,18 @@ class ColorizerCache
         }
     }
 
-    public IEnumerable<ColorizedLine> Colorize(string code, Func<string, IEnumerable<ColorizedLine>> generator)
+    public IEnumerable<ColorizedLine> Colorize(string lang, string code, Func<string, IEnumerable<ColorizedLine>> generator)
     {
+        string key = $"{lang}:{code}";
         CacheEntry e;
-        if (cache.TryGetValue(code, out e))
+        if (cache.TryGetValue(key, out e))
         {
             e.isUsed = true;
             return e.clines;
         }
         hasNew = true;
         e = new CacheEntry { isUsed = true, clines = generator(code).ToList() };
-        cache.Add(code, e);
+        cache.Add(key, e);
         return e.clines;
     }
 
@@ -1285,8 +1286,10 @@ class ColorizerCache
     static string SerializeColor(IEnumerable<ColorizedLine> lines)
     {
         var sb = new StringBuilder();
+        var needComma = false;
         foreach (var line in lines)
         {
+            if (needComma) sb.Append(",");
             foreach (var word in line.Words)
             {
                 sb.Append(word.IsItalic ? "i#" : "r#");
@@ -1294,7 +1297,7 @@ class ColorizerCache
                 sb.Append(word.Text.Replace("\\", "\\\\").Replace(",", "\\c").Replace("\n", "\\n").Replace("\r", "\\r"));
                 sb.Append(",");
             }
-            sb.Append(",");
+            needComma = true;
         }
         return sb.ToString();
     }
