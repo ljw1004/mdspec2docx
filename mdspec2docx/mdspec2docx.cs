@@ -309,11 +309,11 @@ class MarkdownSpec
                         //
                         if (sr.Level > 4)
                         {
-                            Report.Error("MD001", "Only support heading depths up to ####");
+                            Report.Error("CSmd01", "Only support heading depths up to ####");
                         }
                         else if (Sections.Any(s => s.Url == sr.Url))
                         {
-                            Report.Error("MD002", $"Duplicate section title {sr.Url}");
+                            Report.Error("CSmd02", $"Duplicate section title {sr.Url}");
                         }
                         else
                         {
@@ -325,7 +325,7 @@ class MarkdownSpec
                     }
                     catch (Exception ex)
                     {
-                        Report.Error("MD003", ex.Message); // constructor of SectionRef might throw
+                        Report.Error("CSmd03", ex.Message); // constructor of SectionRef might throw
                     }
                 }
                 else if (mdp.IsCodeBlock)
@@ -340,7 +340,7 @@ class MarkdownSpec
                         p.Link = url; p.LinkName = title;
                         if (p.ProductionName != null && Grammar.Productions.Any(dupe => dupe.ProductionName == p.ProductionName))
                         {
-                            Report.Warning("MD004", $"Duplicate grammar for {p.ProductionName}");
+                            Report.Warning("CSmd04", $"Duplicate grammar for {p.ProductionName}");
                         }
                         Grammar.Productions.Add(p);
                     }
@@ -592,8 +592,8 @@ class MarkdownSpec
             {
                 var use = italics.First(i => i.Literal == s);
                 var def = terms[s];
-                Report.Warning("MD005", $"Term '{s}' used before definition", use.Loc);
-                Report.Warning("MD005b", $"... definition location of '{s}' for previous warning", def.Loc);
+                Report.Warning("CSmd05", $"Term '{s}' used before definition", use.Loc);
+                Report.Warning("CSmd05b", $"... definition location of '{s}' for previous warning", def.Loc);
             }
 
             // Terms that are also production names?
@@ -602,7 +602,7 @@ class MarkdownSpec
             foreach (var s in productionset)
             {
                 var def = terms[s];
-                Report.Warning("MD006", $"Terms '{s}' is also a grammar production name", def.Loc);
+                Report.Warning("CSmd06", $"Terms '{s}' is also a grammar production name", def.Loc);
             }
 
             // Terms that were defined but never used?
@@ -611,7 +611,7 @@ class MarkdownSpec
             foreach (var s in termset)
             {
                 var def = terms[s];
-                Report.Warning("MD007", $"Term '{s}' is defined but never used", def.Loc);
+                Report.Warning("CSmd07", $"Term '{s}' is defined but never used", def.Loc);
             }
 
             // Which single-word production-names appear in italics?
@@ -686,7 +686,7 @@ class MarkdownSpec
             {
                 var mdp = md as MarkdownParagraph.Paragraph;
                 var spans = mdp.Item;
-                yield return new Paragraph(Spans2Elements(spans));
+                yield return new Paragraph(Spans2Elements(spans).ToList());
                 yield break;
             }
 
@@ -748,8 +748,8 @@ class MarkdownSpec
                     if (content.IsParagraph || content.IsSpan)
                     {
                         var spans = (content.IsParagraph ? (content as MarkdownParagraph.Paragraph).Item : (content as MarkdownParagraph.Span).Item);
-                        if (item.HasBullet) yield return new Paragraph(Spans2Elements(spans)) { ParagraphProperties = new ParagraphProperties(new NumberingProperties(new ParagraphStyleId { Val = "ListParagraph" }, new NumberingLevelReference { Val = item.Level }, new NumberingId { Val = nid })) };
-                        else yield return new Paragraph(Spans2Elements(spans)) { ParagraphProperties = new ParagraphProperties(new Indentation { Left = calcIndent(item.Level) }) };
+                        if (item.HasBullet) yield return new Paragraph(Spans2Elements(spans).ToList()) { ParagraphProperties = new ParagraphProperties(new NumberingProperties(new ParagraphStyleId { Val = "ListParagraph" }, new NumberingLevelReference { Val = item.Level }, new NumberingId { Val = nid })) };
+                        else yield return new Paragraph(Spans2Elements(spans).ToList()) { ParagraphProperties = new ParagraphProperties(new Indentation { Left = calcIndent(item.Level) }) };
                     }
                     else if (content.IsQuotedBlock || content.IsCodeBlock)
                     {
@@ -778,7 +778,7 @@ class MarkdownSpec
                     }
                     else
                     {
-                        Report.Error("MD008", $"Unexpected item in list '{content.GetType().Name}'");
+                        Report.Error("CSmd08", $"Unexpected item in list '{content.GetType().Name}'");
                     }
                 }
             }
@@ -792,11 +792,11 @@ class MarkdownSpec
                 var runs = new List<Run>();
                 var onFirstLine = true;
                 IEnumerable<ColorizedLine> lines;
-                if (lang == "csharp" || lang == "c#" || lang == "cs") lines = Colorize.CSharp(code);
-                else if (lang == "vb" || lang == "vbnet" || lang == "vb.net") lines = Colorize.VB(code);
-                else if (lang == "" || lang == "xml") lines = Colorize.PlainText(code);
-                else if (lang == "antlr") lines = Antlr.ColorizeAntlr(code);
-                else { Report.Error("MD009", $"unrecognized language {lang}"); lines = Colorize.PlainText(code); }
+                if (lang == "csharp" || lang == "c#" || lang == "cs") lines = Colorize.CSharp(code).ToList();
+                else if (lang == "vb" || lang == "vbnet" || lang == "vb.net") lines = Colorize.VB(code).ToList();
+                else if (lang == "" || lang == "xml") lines = Colorize.PlainText(code).ToList();
+                else if (lang == "antlr") lines = Antlr.ColorizeAntlr(code).ToList();
+                else { Report.Error("CSmd09", $"unrecognized language {lang}"); lines = Colorize.PlainText(code); }
                 foreach (var line in lines)
                 {
                     if (onFirstLine) onFirstLine = false; else runs.Add(new Run(new Break()));
@@ -836,7 +836,7 @@ class MarkdownSpec
                 var align = mdt.Item2;
                 var rows = mdt.Item3;
                 var table = new Table();
-                if (header == null) Report.Error("MD010", "Github requires all tables to have header rows");
+                if (header == null) Report.Error("CSmd10", "Github requires all tables to have header rows");
                 if (!header.Any(cell => cell.Length > 0)) header = null; // even if Github requires an empty header, we can at least cull it from Docx
                 var tstyle = new TableStyle { Val = "TableGrid" };
                 var tindent = new TableIndentation { Width = 360, Type = TableWidthUnitValues.Dxa };
@@ -882,7 +882,7 @@ class MarkdownSpec
             }
             else
             {
-                Report.Error("MD011", $"Unrecognized markdown element {md.GetType().Name}");
+                Report.Error("CSmd11", $"Unrecognized markdown element {md.GetType().Name}");
                 yield return new Paragraph(new Run(new Text($"[{md.GetType().Name}]")));
             }
         }
@@ -904,9 +904,9 @@ class MarkdownSpec
                 var level = item.Level;
                 var isItemOrdered = item.IsBulletOrdered;
                 var content = item.Paragraph;
-                if (isOrdered.ContainsKey(level) && isOrdered[level] != isItemOrdered) Report.Error("MD012", "List can't mix ordered and unordered items at same level");
+                if (isOrdered.ContainsKey(level) && isOrdered[level] != isItemOrdered) Report.Error("CSmd12", "List can't mix ordered and unordered items at same level");
                 isOrdered[level] = isItemOrdered;
-                if (level > 3) Report.Error("MD013", "Can't have more than 4 levels in a list");
+                if (level > 3) Report.Error("CSmd13", "Can't have more than 4 levels in a list");
             }
             return flat;
         }
@@ -942,7 +942,7 @@ class MarkdownSpec
                     }
                     else
                     {
-                        Report.Error("MD014", $"nothing fancy allowed in lists - specifically not '{mdp.GetType().Name}'");
+                        Report.Error("CSmd14", $"nothing fancy allowed in lists - specifically not '{mdp.GetType().Name}'");
                     }
                 }
             }
@@ -978,7 +978,7 @@ class MarkdownSpec
                         var _ = "";
                         if (s.IsEmphasis) { s = (s as MarkdownSpan.Emphasis).Item.Single(); _ = "_"; }
                         if (s.IsLiteral) return _ + (s as MarkdownSpan.Literal).Item + _;
-                        Report.Error("MD015", $"something odd inside emphasis '{s.GetType().Name}' - only allowed emphasis and literal"); return "";
+                        Report.Error("CSmd15", $"something odd inside emphasis '{s.GetType().Name}' - only allowed emphasis and literal"); return "";
                     });
                     spans = new List<MarkdownSpan>() { MarkdownSpan.NewLiteral(string.Join("", spans2)) };
                 }
@@ -997,8 +997,8 @@ class MarkdownSpec
                         if (Terms.ContainsKey(literal))
                         {
                             var def = Terms[literal];
-                            Report.Warning("MD016", $"Term '{literal}' defined a second time");
-                            Report.Warning("MD016b", $"Here was the previous definition of term '{literal}'", def.Loc);
+                            Report.Warning("CSmd16", $"Term '{literal}' defined a second time");
+                            Report.Warning("CSmd16b", $"Here was the previous definition of term '{literal}'", def.Loc);
                         }
                         else Terms.Add(literal, termdef);
                     }
@@ -1007,7 +1007,7 @@ class MarkdownSpec
                 // Convention inside our specs is that emphasis only ever contains literals,
                 // either to emphasis some human-text or to refer to an ANTLR-production
                 ProductionRef prodref = null;
-                if (!nestedSpan && md.IsEmphasis && (spans.Count() != 1 || !spans.First().IsLiteral)) Report.Error("MD017", $"something odd inside emphasis");
+                if (!nestedSpan && md.IsEmphasis && (spans.Count() != 1 || !spans.First().IsLiteral)) Report.Error("CSmd17", $"something odd inside emphasis");
                 if (!nestedSpan && md.IsEmphasis && spans.Count() == 1 && spans.First().IsLiteral)
                 {
                     literal = (spans.First() as MarkdownSpan.Literal).Item;
@@ -1080,12 +1080,12 @@ class MarkdownSpec
                 var anchor = "";
                 if (spans.Count() == 1 && spans.First().IsLiteral) anchor = mdunescape(spans.First() as MarkdownSpan.Literal);
                 else if (spans.Count() == 1 && spans.First().IsInlineCode) anchor = (spans.First() as MarkdownSpan.InlineCode).Item;
-                else { Report.Error("MD018", $"Link anchor must be Literal or InlineCode, not '{md.GetType().Name}'"); yield break; }
+                else { Report.Error("CSmd18", $"Link anchor must be Literal or InlineCode, not '{md.GetType().Name}'"); yield break; }
 
                 if (Sections.ContainsKey(url))
                 {
                     var section = Sections[url];
-                    if (anchor != section.Title) Report.Warning("MD019", $"Mismatch: link anchor is '{anchor}', should be '{section.Title}'");
+                    if (anchor != section.Title) Report.Warning("CSmd19", $"Mismatch: link anchor is '{anchor}', should be '{section.Title}'");
                     var txt = new Text("§" + section.Number) { Space = SpaceProcessingModeValues.Preserve };
                     var run = new Hyperlink(new Run(txt)) { Anchor = section.BookmarkName };
                     yield return run;
@@ -1104,7 +1104,7 @@ class MarkdownSpec
                 }
                 else
                 {
-                    Report.Error("MD020", $"Hyperlink url '{url}' unrecognized - not a recognized heading, and not http");
+                    Report.Error("CSmd20", $"Hyperlink url '{url}' unrecognized - not a recognized heading, and not http");
                 }
             }
 
@@ -1115,7 +1115,7 @@ class MarkdownSpec
 
             else
             {
-                Report.Error("MD020", $"Unrecognized markdown element {md.GetType().Name}");
+                Report.Error("CSmd20", $"Unrecognized markdown element {md.GetType().Name}");
                 yield return new Run(new Text($"[{md.GetType().Name}]"));
             }
         }

@@ -2,8 +2,7 @@
 //
 // * Something goofy is going on with the TOC in the Word document. The field codes are broken, so it
 //   isn't recognized as a field. And if I edit the field in Word (e.g. to add page numbers) then all
-//   within-spec section links get broken. Also, md2docx should only generate level 1+2 TOC headings.
-// * Make a better "report error" thing, and distinguish fatal from non-fatal (e.g. duplicate section title)
+//   within-spec section links get broken.
 
 using Grammar2Html;
 using Microsoft.FSharp.Core;
@@ -60,13 +59,13 @@ static class Program
             var grammar = Antlr.ReadFile(antlrfn);
             foreach (var diff in CompareGrammars(grammar, md.Grammar))
             {
-                if (diff.authority == null) Console.WriteLine($"mdspec2docx: error MD021: markdown has superfluous production '{diff.productionName}'");
-                else if (diff.copy == null) Console.WriteLine($"mdspec2docx: error MD022: markdown lacks production '{diff.productionName}'");
+                if (diff.authority == null) Console.WriteLine($"mdspec2docx: error CSmd21: markdown has superfluous production '{diff.productionName}'");
+                else if (diff.copy == null) Console.WriteLine($"mdspec2docx: error CSmd22: markdown lacks production '{diff.productionName}'");
                 else
                 {
-                    Console.WriteLine($"mdspec2docx: error MD023: production '{diff.productionName}' differs between markdown and antlr.g4");
-                    Console.WriteLine("mdspec2docx: error MD023b: antlr.g4 says " + diff.authority.Replace("\r", "\\r").Replace("\n", "\\n"));
-                    Console.WriteLine("mdspec2docx: error MD023c: markdown says " + diff.copy.Replace("\r", "\\r").Replace("\n", "\\n"));
+                    Console.WriteLine($"mdspec2docx: error CSmd23: production '{diff.productionName}' differs between markdown and antlr.g4");
+                    Console.WriteLine("mdspec2docx: error CSmd23b: antlr.g4 says " + diff.authority.Replace("\r", "\\r").Replace("\n", "\\n"));
+                    Console.WriteLine("mdspec2docx: error CSmd23c: markdown says " + diff.copy.Replace("\r", "\\r").Replace("\n", "\\n"));
                 }
             }
             foreach (var p in grammar.Productions)
