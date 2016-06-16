@@ -107,6 +107,9 @@
     <None Include="..\..\vbspec\statements.md">
       <Link>vb\statements.md</Link>
     </None>
+    <None Include="..\..\vbspec\template.docx">
+      <Link>vb\template.docx</Link>
+    </None>
     <None Include="..\..\vbspec\type-members.md">
       <Link>vb\type-members.md</Link>
     </None>
