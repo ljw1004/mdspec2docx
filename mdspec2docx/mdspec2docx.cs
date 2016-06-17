@@ -578,7 +578,7 @@ class MarkdownSpec
         }
     }
 
-    public void WriteFile(string basedOn, string fn)
+    public void WriteFile(string basedOn, string fn, string tempdir)
     {
         using (var templateDoc = WordprocessingDocument.Open(basedOn, false))
         using (var resultDoc = WordprocessingDocument.Create(fn, WordprocessingDocumentType.Document))
@@ -620,7 +620,7 @@ class MarkdownSpec
             var terms = new Dictionary<string, TermRef>();
             var termkeys = new List<string>();
             var italics = new List<ItalicUse>();
-            var colorizer = new ColorizerCache();
+            var colorizer = new ColorizerCache(tempdir);
             foreach (var src in Sources)
             {
                 Report.CurrentFile = Path.GetFullPath(src.Item1);
@@ -1267,10 +1267,14 @@ class ColorizerCache
 
     private Dictionary<string, CacheEntry> cache = new Dictionary<string, CacheEntry>();
     private bool hasNew;
-    private string fn = Path.GetTempPath() + "\\colorized.cache.txt";
+    private string fn;
+    private string tempdir;
 
-    public ColorizerCache()
+    public ColorizerCache(string tempdir)
     {
+        this.tempdir = tempdir;
+        if (tempdir == null) return;
+        fn = tempdir + "\\colorized.cache.txt";
         if (!File.Exists(fn)) return;
         try
         {
@@ -1293,6 +1297,7 @@ class ColorizerCache
 
     public void Close()
     {
+        if (fn == null) return;
         if (!hasNew && cache.All(kv => kv.Value.isUsed)) return;
         using (var s = new StreamWriter(fn))
         {

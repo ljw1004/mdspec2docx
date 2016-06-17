@@ -18,10 +18,11 @@ static class Program
 
     static int Main(string[] args)
     {
-        // mdspec2docx *.md csharp.g4 template.docx -o readme.doc -o grammar.html -interactive
+        // mdspec2docx *.md csharp.g4 template.docx -o readme.doc -o grammar.html -interactive -td dir
         var ifiles = new List<string>();
         var ofiles = new List<string>();
         bool isinteractive = false;
+        string tempdir = null;
         string argserror = "";
         for (int i=0; i<args.Length; i++)
         {
@@ -29,6 +30,7 @@ static class Program
             if (arg.StartsWith("-"))
             {
                 if (arg == "-o" && i < args.Length - 1) { i++; ofiles.Add(args[i]); }
+                else if (arg == "-td" && i < args.Length-1) { i++; tempdir = args[i]; }
                 else if (arg == "-interactive") { isinteractive = true; }
                 else argserror += $"Unrecognized '{arg}'\n";
             }
@@ -73,17 +75,30 @@ static class Program
         if (odocfile == null) argserror += "No output .docx file specified\n";
         if (ireadmefile == null && ifiles.Count == 0) argserror += "No .md files supplied\n";
         if (idocxfile == null) argserror += "No template.docx supplied\n";
+        if (tempdir != null)
+        {
+            try
+            {
+                Directory.CreateDirectory(tempdir);
+            }
+            catch (Exception ex)
+            {
+                argserror += $"Directory '{tempdir}' - {ex.Message}\n";
+                tempdir = null;
+            }
+        }
 
         if (argserror != "")
         {
             Console.Error.WriteLine(argserror);
-            Console.Error.WriteLine("mdspec2docx *.md grammar.g4 template.docx -o spec.docx -o grammar.html -interactive");
+            Console.Error.WriteLine("mdspec2docx *.md grammar.g4 template.docx -o spec.docx -o grammar.html -interactive -td dir");
             Console.Error.WriteLine();
             Console.Error.WriteLine("Turns the markdown files into a word document based on the template.");
             Console.Error.WriteLine("If readme.md and other files are given, then readme is used solely to");
             Console.Error.WriteLine("   sort the docx based on its list of `* [Link](subfile.md)`.");
             Console.Error.WriteLine("If a .g4 is given, it verifies 1:1 correspondence with ```antlr blocks.");
             Console.Error.WriteLine("The -interactive flag causes the html+docx to be opened once done.");
+            Console.Error.WriteLine("The -td temp directory will enable incremental (faster) runs in future.");
             return 1;
         }
 
@@ -177,17 +192,27 @@ static class Program
             {
                 Console.WriteLine($"Writing '{Path.GetFileName(ohtmlfile)}'");
                 File.WriteAllText(ohtmlfile, grammar.ToHtml(), Encoding.UTF8);
-                if (isinteractive) Process.Start(ohtmlfile);
             }
         }
 
         // Generate the Specification.docx file
         if (odocfile != null)
         {
-            if (isinteractive) odocfile = PickUniqueFilename(odocfile);
-            Console.WriteLine($"Writing '{Path.GetFileName(odocfile)}'");
-            md.WriteFile(idocxfile, odocfile);
-            if (isinteractive) Process.Start(odocfile);
+            var odocfile2 = odocfile;
+            if (isinteractive) odocfile2 = PickUniqueFilename(odocfile2);
+            if (odocfile2 != odocfile) Report("MD26", "error", $"File '{odocfile}' was in use", "mdspec2docx");
+            Console.WriteLine($"Writing '{Path.GetFileName(odocfile2)}'");
+            try
+            {
+                md.WriteFile(idocxfile, odocfile2, tempdir);
+            }
+            catch (Exception ex)
+            {
+                Report("MD27", "error", ex.Message, "mdspec2docx");
+                return 1;
+            }
+            if (isinteractive) Process.Start(odocfile2);
+            if (odocfile2 != odocfile) return 1;
         }
         return 0;
     }
