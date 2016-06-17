@@ -200,6 +200,8 @@ class MarkdownSpec
             BookmarkName = $"_Toc{count:00000}"; count++;
             Loc = new SourceLocation(filename, this, mdh, null);
         }
+
+        public override string ToString() => Url;
     }
 
     public class Reporter
@@ -270,25 +272,53 @@ class MarkdownSpec
         return md;
     }
 
-    public static MarkdownSpec ReadFiles(IEnumerable<string> files, List<Tuple<int, string, SourceLocation>> readme_headings)
+    public static MarkdownSpec ReadFiles(IEnumerable<string> files, List<Tuple<int, string, string, SourceLocation>> readme_headings)
     {
         var md = new MarkdownSpec { files = files };
         md.Init();
-        if (readme_headings == null) return md;
 
-        var md_headings = (from s in md.Sections
-                           where s.Level <= 2
-                           select Tuple.Create(s.Level, s.Url, s.Loc)).ToList();
+        var md_headings = md.Sections.Where(s => s.Level <= 2).ToList();
+        if (readme_headings != null && md_headings.Count > 0)
+        {
+            var readme_order = (from readme in readme_headings
+                                select new
+                                {
+                                    orderInBody = md_headings.FindIndex(mdh => readme.Item1 == mdh.Level && readme.Item3 == mdh.Url),
+                                    level = readme.Item1,
+                                    title = readme.Item2,
+                                    url = readme.Item3,
+                                    loc = readme.Item4
+                                }).ToList();
 
-        var readme_order = from readme in readme_headings
-                           select md_headings.FindIndex(mdh => readme.Item1 == mdh.Item1 && readme.Item2 == mdh.Item2);
-
-        var md_order = from mdh in md_headings
-                       select readme_headings.FindIndex(readme => readme.Item1 == mdh.Item1 && readme.Item2 == mdh.Item2);
-
-
-            //md.Report.Error("MD24", $"Section '{s.Url}' should be listed in readme.md", s.Loc);
-            //md.Report.Error("MD25", $"Section '{rh.Item2}' from readme.md is absent in rest of spec", rh.Item3);
+            // The readme order should go "1,2,3,..." up to md_headings.Last()
+            int expected = 0;
+            foreach (var readme in readme_order)
+            {
+                if (readme.orderInBody == -1)
+                {
+                    var link = $"{new string(' ', readme.level * 2 - 2)}* [{readme.title}]({readme.url})";
+                    md.Report.Error("MD25", $"Remove: {link}", readme.loc);
+                }
+                else if (readme.orderInBody < expected)
+                {
+                    continue; // error has already been reported
+                }
+                else if (readme.orderInBody == expected)
+                {
+                    expected++; continue;
+                }
+                else if (readme.orderInBody > expected)
+                {
+                    for (int missing = expected; missing < readme.orderInBody; missing++)
+                    {
+                        var s = md_headings[missing];
+                        var link = $"{new string(' ', s.Level * 2 - 2)}* [{s.Title}]({s.Url})";
+                        md.Report.Error("MD24", $"Insert: {link}", readme.loc);
+                    }
+                    expected = readme.orderInBody+1;
+                }
+            }
+        }
 
         return md;
     }

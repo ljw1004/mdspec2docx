@@ -92,7 +92,7 @@ static class Program
 
         // Read input file. If it contains a load of linked filenames, then read them instead.
         List<string> ifiles_in_order = new List<string>();
-        List<Tuple<int, string, SourceLocation>> urls = null;
+        List<Tuple<int, string, string, SourceLocation>> urls = null;
         if (ireadmefile == null)
         {
             ifiles_in_order.AddRange(ifiles);
@@ -104,7 +104,7 @@ static class Program
         else
         {
             var readme = FSharp.Markdown.Markdown.Parse(File.ReadAllText(ireadmefile));
-            urls = new List<Tuple<int, string, SourceLocation>>();
+            urls = new List<Tuple<int, string, string, SourceLocation>>();
             // is there a nicer way to get the URLs of all depth-1 and depth-2 URLs in this list? ...
             foreach (var list in readme.Paragraphs.OfType<FSharp.Markdown.MarkdownParagraph.ListBlock>())
             {
@@ -122,18 +122,20 @@ static class Program
                 }
                 foreach (var tpp in pp)
                 {
+                    var level = tpp.Item1;
                     var spanpar = tpp.Item2 as FSharp.Markdown.MarkdownParagraph.Span;
                     if (spanpar == null) continue;
                     var links = spanpar.Item.OfType<FSharp.Markdown.MarkdownSpan.DirectLink>();
                     urls.AddRange(from link in links
+                                  let title = string.Join("",link.Item1.OfType<FSharp.Markdown.MarkdownSpan.Literal>().Select(l => l.Item))
                                   let url = link.Item2.Item1
                                   where url.ToLower().EndsWith(".md") || url.ToLower().Contains(".md#")
                                   let loc = new SourceLocation(ireadmefile, null, list, link)
-                                  select Tuple.Create(tpp.Item1, url, loc));
+                                  select Tuple.Create(level, title, url, loc));
                 }
             }
             var filelinks = (from turl in urls
-                             let url = turl.Item2
+                             let url = turl.Item3
                              let i = url.IndexOf('#')
                              let url2 = (i==-1 ? url : url.Substring(0,i))
                              select url2).ToList().Distinct();
