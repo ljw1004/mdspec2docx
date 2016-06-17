@@ -92,6 +92,7 @@ static class Program
 
         // Read input file. If it contains a load of linked filenames, then read them instead.
         List<string> ifiles_in_order = new List<string>();
+        List<Tuple<int, string, SourceLocation>> urls = null;
         if (ireadmefile == null)
         {
             ifiles_in_order.AddRange(ifiles);
@@ -103,24 +104,47 @@ static class Program
         else
         {
             var readme = FSharp.Markdown.Markdown.Parse(File.ReadAllText(ireadmefile));
-            var links =
-                (from list in readme.Paragraphs.OfType<FSharp.Markdown.MarkdownParagraph.ListBlock>()
-                 let items = list.Item2
-                 from par in items
-                 from spanpar in par.OfType<FSharp.Markdown.MarkdownParagraph.Span>()
-                 let spans = spanpar.Item
-                 from link in spans.OfType<FSharp.Markdown.MarkdownSpan.DirectLink>()
-                 let url = link.Item2.Item1
-                 where url.EndsWith(".md", StringComparison.InvariantCultureIgnoreCase)
-                 select url).ToList().Distinct();
-            foreach (var link in links)
+            urls = new List<Tuple<int, string, SourceLocation>>();
+            // is there a nicer way to get the URLs of all depth-1 and depth-2 URLs in this list? ...
+            foreach (var list in readme.Paragraphs.OfType<FSharp.Markdown.MarkdownParagraph.ListBlock>())
+            {
+                var pp = new List<Tuple<int, FSharp.Markdown.MarkdownParagraph>>();
+                foreach (var pars in list.Item2)
+                {
+                    foreach (var par in pars)
+                    {
+                        pp.Add(Tuple.Create(1, par));
+                        var sublist = par as FSharp.Markdown.MarkdownParagraph.ListBlock;
+                        if (sublist != null) pp.AddRange(from subpars in sublist.Item2
+                                                         from subpar in subpars
+                                                         select Tuple.Create(2, subpar));
+                    }
+                }
+                foreach (var tpp in pp)
+                {
+                    var spanpar = tpp.Item2 as FSharp.Markdown.MarkdownParagraph.Span;
+                    if (spanpar == null) continue;
+                    var links = spanpar.Item.OfType<FSharp.Markdown.MarkdownSpan.DirectLink>();
+                    urls.AddRange(from link in links
+                                  let url = link.Item2.Item1
+                                  where url.ToLower().EndsWith(".md") || url.ToLower().Contains(".md#")
+                                  let loc = new SourceLocation(ireadmefile, null, list, link)
+                                  select Tuple.Create(tpp.Item1, url, loc));
+                }
+            }
+            var filelinks = (from turl in urls
+                             let url = turl.Item2
+                             let i = url.IndexOf('#')
+                             let url2 = (i==-1 ? url : url.Substring(0,i))
+                             select url2).ToList().Distinct();
+            foreach (var link in filelinks)
             {
                 var ifile = ifiles.FirstOrDefault(f => Path.GetFileName(f) == link);
                 if (ifile == null) { Console.Error.WriteLine($"readme.md link '{link}' wasn't one of the files passed on the command line"); return 1; }
                 ifiles_in_order.Add(ifile);
             }
         }
-        var md = MarkdownSpec.ReadFiles(ifiles_in_order);
+        var md = MarkdownSpec.ReadFiles(ifiles_in_order, urls);
 
 
         // Now md.Gramar contains the grammar as extracted out of the *.md files, and moreover has
@@ -147,15 +171,19 @@ static class Program
                 p.LinkName = md.Grammar.Productions.FirstOrDefault(mdp => mdp?.ProductionName == p.ProductionName)?.LinkName;
             }
 
-            if (ohtmlfile != null) File.WriteAllText(ohtmlfile, grammar.ToHtml(), Encoding.UTF8);
-            if (ohtmlfile != null && isinteractive) Process.Start(ohtmlfile);
+            if (ohtmlfile != null)
+            {
+                Console.WriteLine($"Writing '{Path.GetFileName(ohtmlfile)}'");
+                File.WriteAllText(ohtmlfile, grammar.ToHtml(), Encoding.UTF8);
+                if (isinteractive) Process.Start(ohtmlfile);
+            }
         }
 
         // Generate the Specification.docx file
         if (odocfile != null)
         {
             if (isinteractive) odocfile = PickUniqueFilename(odocfile);
-            Console.WriteLine($"Writing {Path.GetFileName(odocfile)}");
+            Console.WriteLine($"Writing '{Path.GetFileName(odocfile)}'");
             md.WriteFile(idocxfile, odocfile);
             if (isinteractive) Process.Start(odocfile);
         }

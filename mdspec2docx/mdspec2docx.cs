@@ -167,6 +167,7 @@ class MarkdownSpec
         public string Url;           // statements.md#goto-statement
         public string BookmarkName;  // _Toc00023
         public string MarkdownTitle; // "Goto Statement" or "`<code>`"
+        public SourceLocation Loc;
         public static int count = 1;
 
         public SectionRef(MarkdownParagraph.Heading mdh, string filename)
@@ -197,6 +198,7 @@ class MarkdownSpec
             }
             Url = filename + "#" + Url;
             BookmarkName = $"_Toc{count:00000}"; count++;
+            Loc = new SourceLocation(filename, this, mdh, null);
         }
     }
 
@@ -268,10 +270,26 @@ class MarkdownSpec
         return md;
     }
 
-    public static MarkdownSpec ReadFiles(IEnumerable<string> files)
+    public static MarkdownSpec ReadFiles(IEnumerable<string> files, List<Tuple<int, string, SourceLocation>> readme_headings)
     {
         var md = new MarkdownSpec { files = files };
         md.Init();
+        if (readme_headings == null) return md;
+
+        var md_headings = (from s in md.Sections
+                           where s.Level <= 2
+                           select Tuple.Create(s.Level, s.Url, s.Loc)).ToList();
+
+        var readme_order = from readme in readme_headings
+                           select md_headings.FindIndex(mdh => readme.Item1 == mdh.Item1 && readme.Item2 == mdh.Item2);
+
+        var md_order = from mdh in md_headings
+                       select readme_headings.FindIndex(readme => readme.Item1 == mdh.Item1 && readme.Item2 == mdh.Item2);
+
+
+            //md.Report.Error("MD24", $"Section '{s.Url}' should be listed in readme.md", s.Loc);
+            //md.Report.Error("MD25", $"Section '{rh.Item2}' from readme.md is absent in rest of spec", rh.Item3);
+
         return md;
     }
 
